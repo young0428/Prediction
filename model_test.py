@@ -17,4 +17,4 @@ prediction = LSTMLayer(ts_encoder_output)
 model = Model(inputs=ts_input,outputs=prediction)
 model.summary()
 
-tf.keras.utils.plot_model(model, to_file='model.png', show_shapes=True)
+tf.keras.utils.plot_model(encoder_model, to_file='mode2.png', show_shapes=True)

@@ -10,7 +10,7 @@ def FullChannelEncoder(encoded_feature_num,inputs, window_size = 2, dilated = [1
 					   filter_num=32, stride_num = 1, channel_num = 23, pooling_rate = 8):
 	layers_list = []
 	for df in dilated:
-		x = SeparableConv2D(filters=8, kernel_size = (1,16), activation='relu',padding='same',dilation_rate=(1,df))(inputs)
+		x = SeparableConv2D(filters=8, kernel_size = (1,8), activation='relu',padding='same',dilation_rate=(1,df))(inputs)
 		#padded = ZeroPadding2D(padding=( (0,0),(df*(8-1),0) ))(x)
 		x = SeparableConv2D(filters=2, kernel_size=(23,1), activation='relu', padding='valid')(x)
 		x = MaxPooling2D((1,2))(x)
@@ -40,6 +40,8 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8):
 	decoder_output = Conv2DTranspose(filters=1, kernel_size=(1,2),activation='relu',padding='same')(x)
 
 	return decoder_output
+
+
 
 """
 inputs = Input(shape=(23,512,1))

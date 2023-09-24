@@ -42,6 +42,7 @@ for info in total_seizure_info_list:
 	interictal_list = []
 	preictal_1hour_list = []
 	preictal_list = []
+	preictal_late_list = []
 	post_ictal_list = []
 	for i in range(len(seizure_time_set)):
 		seizure_start_time = seizure_time_set[i][0]
@@ -107,6 +108,24 @@ for info in total_seizure_info_list:
 					preictal_start = seizure_start_time - (SOP + SPH)*60
 				
 				preictal_list.append( [preictal_start, preictal_end] )
+		
+		if i == 0:
+			if seizure_start_time - SPH * 60 < 0:
+				preictal_late_start = 0
+			else:
+				preictal_late_start = seizure_start_time - SPH*60
+			preictal_late_end = seizure_end_time
+			preictal_late_list.append( [preictal_late_start, preictal_late_end] )
+		else:
+			if seizure_start_time - SPH * 60 < seizure_time_set[i-1][1]:
+				preictal_late_start = seizure_time_set[i-1][1]
+			else:
+				preictal_late_start = seizure_start_time - SPH*60
+			preictal_late_end = seizure_end_time
+			preictal_late_list.append( [preictal_late_start, preictal_late_end] )
+
+
+
 
 		### Post ictal ###
 		if i == len(seizure_time_set)-1:
@@ -136,14 +155,19 @@ for info in total_seizure_info_list:
 		info['interictal'] = None
 
 	if preictal_1hour_list: # preictal-1hour리스트가 비어있지 않으면
-		info['preictal_1h'] = preictal_1hour_list
+		info['preictal_early'] = preictal_1hour_list
 	else:
-		info['preictal_1h'] = None
+		info['preictal_early'] = None
 	
 	if preictal_list: # preictal 리스트가 비어있지 않으면
-		info['preictal'] = preictal_list
+		info['preictal_ontime'] = preictal_list
 	else:
-		info['preictal'] = None
+		info['preictal_ontime'] = None
+	
+	if preictal_late_list:
+		info['preictal_late'] = preictal_late_list
+	else:
+		info['preictal_late'] = None
 	
 	if post_ictal_list: # postictal 리스트가 비어있지 않으면
 		info['postictal'] = post_ictal_list
