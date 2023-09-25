@@ -10,15 +10,18 @@ def FullChannelEncoder(encoded_feature_num,inputs, window_size = 2, dilated = [1
 					   filter_num=32, stride_num = 1, channel_num = 23, pooling_rate = 8):
 	layers_list = []
 	for df in dilated:
-		x = SeparableConv2D(filters=8, kernel_size = (1,8), activation='relu',padding='same',dilation_rate=(1,df))(inputs)
+		x = SeparableConv2D(filters=8, kernel_size = (1,4), activation='relu',padding='same',dilation_rate=(1,df))(inputs)	# (None, 23, 512, 8)
 		#padded = ZeroPadding2D(padding=( (0,0),(df*(8-1),0) ))(x)
-		x = SeparableConv2D(filters=2, kernel_size=(23,1), activation='relu', padding='valid')(x)
-		x = MaxPooling2D((1,2))(x)
-		x = SeparableConv2D(filters=2, kernel_size=(1,4),activation='relu',padding='same')(x)
-		x = MaxPooling2D((1,4))(x)
+		x = MaxPooling2D((1,2))(x)	# (None, 23, 256, 8)
+		x = SeparableConv2D(filters=16, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 23, 256, 16)
+		x = MaxPooling2D((1,2))(x)	# (None, 23, 128, 16)
+		x = SeparableConv2D(filters=32, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 23, 128, 32)
+		x = MaxPooling2D((1,2))(x)	# (None, 23, 64, 32)
+		x = SeparableConv2D(filters=2, kernel_size=(23,1), activation='relu', padding='valid')(x)	# (None, 1, 64, 2)
 		layers_list.append(x)
 	x = Concatenate(axis=-1)(layers_list)
-	x = Reshape((int(window_size*freq/pooling_rate),len(dilated)*2))(x)
+	x=  tf.squeeze(x, axis = -3)
+	#x = Reshape((int(window_size*freq/pooling_rate),len(dilated)*2))(x)
 
 	return x
 
@@ -28,11 +31,13 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8):
 	x_splited = tf.split(x,len(dilated),axis=-1)
 	x_list = []
 	for i in range(len(dilated)):
-		x = UpSampling2D(size=(1,4))(x_splited[i])
-		x = Conv2DTranspose(filters=2,kernel_size=(1,4),activation='relu',padding='same')(x)
+		x = Conv2DTranspose(filters=2,kernel_size=(23,1),activation='relu',padding='valid')(x_splited[i])
 		x = UpSampling2D(size=(1,2))(x)
-		x = Conv2DTranspose(filters=2,kernel_size=(23,1),activation='relu',padding='valid')(x)
-		x = Conv2DTranspose(filters=8,kernel_size=(1,16),activation='relu',padding='same',dilation_rate=dilated[i])(x)
+		x = Conv2DTranspose(filters=32,kernel_size=(1,4),activation='relu',padding='same')(x)
+		x = UpSampling2D(size=(1,2))(x)
+		x = Conv2DTranspose(filters=16,kernel_size=(1,4),activation='relu',padding='same')(x)
+		x = UpSampling2D(size=(1,2))(x)
+		x = Conv2DTranspose(filters=8,kernel_size=(1,4),activation='relu',padding='same',dilation_rate=dilated[i])(x)
 		x_list.append(x)
 
 	x = Concatenate(axis=-1)(x_list)

@@ -10,6 +10,14 @@ from LSTMmodel import LSTMLayer
 encoder_input = Input(shape = (23,512,1))
 encoder_output = FullChannelEncoder(64,encoder_input)
 encoder_model = Model(inputs=encoder_input, outputs=encoder_output)
+encoder_model.summary()
+
+decoder_output = FullChannelDecoder(encoder_output)
+decoder_model = Model(inputs = encoder_output, outputs=decoder_output)
+decoder_model.summary()
+
+
+"""
 ts_input = Input(shape=(10,23,512,1))
 ts_encoder_output = TimeDistributed(encoder_model)(ts_input)
 prediction = LSTMLayer(ts_encoder_output)
@@ -18,3 +26,4 @@ model = Model(inputs=ts_input,outputs=prediction)
 model.summary()
 
 tf.keras.utils.plot_model(encoder_model, to_file='mode2.png', show_shapes=True)
+"""
