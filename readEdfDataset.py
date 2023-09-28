@@ -13,6 +13,7 @@ def SegmentToData(segments):
             if not f == None:
                 f.close()
             f = pyedflib.EdfReader(segment[0])
+            print("file opened")
         freq = f.getSampleFrequencies()
         labels = f.getSignalLabels()
         chn_num = len(labels)
@@ -28,6 +29,7 @@ def SegmentToData(segments):
             if skip:
                 continue
             signal = f.readSignal(i,segment[1],int(freq[i]*segment[2]))
+            # 256 Hz이하일 경우 256Hz로 interpolation을 이용한 upsampling
             if not freq[i] == 256:
                 signal = np.interp(x_upsample,x, signal)
             
@@ -42,5 +44,6 @@ def SegmentToData(segments):
     return signal_for_all_segments
 
 
+####    test code    ####
 test = [ ["E:/SNUH_START_END/patient_3/patient_3.edf",0,2],["E:/SNUH_START_END/patient_3/patient_3.edf",2,2] ]
 a = SegmentToData(test)

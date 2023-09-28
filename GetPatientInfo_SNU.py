@@ -188,8 +188,6 @@ for patient in total_seizure_info_list:
 			for time in time_list:
 				patient_segments_list.append([patient_name_snu, time[0], time[1], dict_keys[i]])
 
-
-
 df = pd.DataFrame(patient_segments_list,columns=['name','start','end','state'])
 df.to_csv('./patient_info.csv',index=False)
 
