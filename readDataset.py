@@ -15,16 +15,16 @@ def LoadDataset(filename):
 
     return interval_dict
 
-
 # state = ['ictal', 'preictal_late', 'preictal_early', 'preictal_ontime', 'postictal','interictal']
-def Interval2Segments(interval_list, window_size, sliding_size):
+# output = [name, start, window_size]
+def Interval2Segments(interval_list, data_path, window_size, sliding_size):
     segments_list = []
     for interval in interval_list:
         start = interval[1]
         end = interval[2]
         segment_num = int(((end-start-window_size)/sliding_size))+1
         for i in range(segment_num):
-            segments_list.append([interval[0], start, window_size])
+            segments_list.append([data_path+'/'+interval[0]+'/'+interval[0]+'.edf', start, window_size])
             start += sliding_size
 
     return segments_list
@@ -43,15 +43,14 @@ def Segments2Data(segments):
                 f.close()
             f = pyedflib.EdfReader(segment[0])
             skip_start = False   # 연속된 시간이면 한번에 읽기 위해 파일 읽는 시작 시간은 그대로 두고 끝 시간만 갱신함
-            print("file opened")
         if not skip_start:
             interval_sets = [] # 연속된 구간이면 한번에 읽고 구간 정해진거에 따라 나누기 위해 구간 저장
             read_start = segment[1]
+        # 최근 세그먼트의 start+window_size 값보다 read_end 값이 작으면 (읽는 끝값) read_end 값 갱신
         if read_end < segment[1] + segment[2]:
             read_end = segment[1] + segment[2]
         interval_sets.append([segment[1]-read_start, segment[1]+segment[2]-read_start ])
 
-        print(interval_sets)
         if not idx+1 >= len(segments):
             if segment[1] + segment[2] >= segments[idx+1][1] :
                 skip_start = True
@@ -61,23 +60,23 @@ def Segments2Data(segments):
         labels = f.getSignalLabels()
         chn_num = len(labels)
 
-
+        # UpSampling을 위해 x 값 생성
         x = np.linspace(0, 10,int((read_end-read_start)*freq[0]) )
         x_upsample = np.linspace(0,10,int(256*(read_end-read_start)))
 
-        print(read_start)
-        print(int(freq[0]*(read_end-read_start)))
         seg = []
         for i in range(len(interval_sets)):
             seg.append([])
 
         for i in range(chn_num-1):
+            # 중복되는 라벨 제거
             chn_skip = False
             for j in range(i):
                 if labels[i] == labels[j]:
                     chn_skip = True
             if chn_skip:
                 continue
+
             signal = f.readSignal(i,read_start,int(freq[i]*(read_end-read_start)))
             
             # 256 Hz이하일 경우 256Hz로 interpolation을 이용한 upsampling
@@ -86,10 +85,6 @@ def Segments2Data(segments):
             
             for j in range(len(interval_sets)):
                 seg[j].append( list(signal[interval_sets[j][0] * 256 : interval_sets[j][1] * 256 ]) )
-                
-            
-        
-                
                 
         
         for s in seg:
@@ -102,9 +97,9 @@ def Segments2Data(segments):
 
 
 ####    test code    ####
-test = [ ["E:/SNUH_START_END/patient_3/patient_3.edf",0,2],["E:/SNUH_START_END/patient_3/patient_3.edf",2,2],["E:/SNUH_START_END/patient_3/patient_3.edf",3,1],
-        ["E:/SNUH_START_END/patient_3/patient_3.edf",5,2],["E:/SNUH_START_END/patient_3/patient_3.edf",5,1]]
-a = Segments2Data(test)
-#data = LoadDataset('C:/Users/dudgb/Desktop/Prediction/patient_info.csv')
-#segments = Interval2Segments(data['ictal'],2,1)
+# test = [ ["E:/SNUH_START_END/patient_3/patient_3.edf",0,2],["E:/SNUH_START_END/patient_3/patient_3.edf",2,2],["E:/SNUH_START_END/patient_3/patient_3.edf",3,1],
+#         ["E:/SNUH_START_END/patient_3/patient_3.edf",5,2],["E:/SNUH_START_END/patient_3/patient_3.edf",5,1]]
+# a = Segments2Data(test)
+# data = LoadDataset('C:/Users/hy105/Desktop/Prediction/patient_info.csv')
+# segments = Interval2Segments(data['ictal'],2,1)
 #print(segments[:100])

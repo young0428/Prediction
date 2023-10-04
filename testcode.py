@@ -1,12 +1,16 @@
 import pyedflib
+import natsort
+import os
 
-path = "E:/SNUH_START_END/patient_1/patient_1.edf"
-f = pyedflib.EdfReader(path)
+data_path = "D:/SNU_DATA"
 
-freq = f.getSampleFrequencies()
-headers = f.getLabel(0)
-num = f.getNSamples()
+file_list = natsort.natsorted(os.listdir(data_path))
 
-print(num/256)
+for file_name in file_list:
+    file_path = data_path+'/'+file_name+'/'+file_name+'.edf'
+    num = int(file_name)
+    os.rename(file_path,data_path+'/'+file_name+'/SNU%03d.edf'%(num))
+    os.rename(data_path+'/'+file_name, data_path+'/SNU%03d'%(num))
+
 
 
