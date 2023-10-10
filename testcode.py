@@ -1,21 +1,16 @@
 import pyedflib
-edf_path = ""
+import natsort
+import os
 
-ictal_state = []
+data_path = "D:/SNU_DATA"
 
+file_list = natsort.natsorted(os.listdir(data_path))
 
-ictal_segments = []
-window_size = 2
-current_sec = 0
-for ictal_interval in ictal_state:
-    current_sec = ictal_interval[1] # [0] == name, [1] == start, [2] == end, [3] == state
-    while(1):
-        if current_sec + window_size > ictal_interval[2]:
-            break
-        # [filename, start, duration] 형태로 저장
-        ictal_segments.append( [edf_path+'/'+ictal_interval[0]+'.edf', current_sec, window_size ] )
-        current_sec += window_size
-
+for file_name in file_list:
+    file_path = data_path+'/'+file_name+'/'+file_name+'.edf'
+    num = int(file_name)
+    os.rename(file_path,data_path+'/'+file_name+'/SNU%03d.edf'%(num))
+    os.rename(data_path+'/'+file_name, data_path+'/SNU%03d'%(num))
 
 
 
