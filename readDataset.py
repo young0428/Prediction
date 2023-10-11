@@ -2,6 +2,7 @@ import pyedflib
 import numpy as np
 import pandas as pd
 import sys
+import traceback
 # 데이터 정리 
 global state_list
 state_list = ['ictal', 'preictal_late', 'preictal_early', 'preictal_ontime', 'postictal','interictal']
@@ -43,7 +44,6 @@ def Segments2Data(segments):
         if (idx+1) % (int(len(segments)/20)) == 0 :
             cnt+=1
             print(f"Data Loading {idx+1} / {len(segments)} ({cnt*5}%)... ")
-            
 
         if not name == segment[0]:
             name = segment[0]
@@ -55,16 +55,16 @@ def Segments2Data(segments):
 
         if not skip_start:
             interval_sets = [] # 연속된 구간이면 한번에 읽고 구간 정해진거에 따라 나누기 위해 구간 저장
-            read_start = segment[1]
+            read_start = float(segment[1])
             read_end = 0
         # 최근 세그먼트의 start+window_size 값보다 read_end 값이 작으면 (읽는 끝값) read_end 값 갱신
-        if read_end < segment[1] + segment[2]:
-            read_end = segment[1] + segment[2]
-        interval_sets.append([segment[1]-read_start, segment[1]+segment[2]-read_start ])
+        if read_end < float(segment[1]) + float(segment[2]):
+            read_end = float(segment[1]) + float(segment[2])
+        interval_sets.append([float(segment[1])-read_start, float(segment[1])+float(segment[2])-read_start ])
 
         if not idx+1 >= len(segments) :
             # 파일이름이 같고, 다음 세그먼트의 시작시간이 더 크면서 현재 세그먼트의 시작시간 + window_size가 다음 세그먼트의 시작이랑 이어질 때
-            if (name == segments[idx+1][0]) and (segment[1] <= segments[idx+1][1]) and (segment[1] + segment[2] >= segments[idx+1][1]) :
+            if (name == segments[idx+1][0]) and (float(segment[1]) <= float(segments[idx+1][1])) and (float(segment[1]) + float(segment[2]) >= float(segments[idx+1][1])) :
                 skip_start = True
                 continue
         skip_start = False
@@ -90,7 +90,7 @@ def Segments2Data(segments):
                     signal = np.interp(x_upsample,x, edf_signal)
                 
                 for j in range(len(interval_sets)):
-                    seg[j].append( list(signal[interval_sets[j][0] * 256 : interval_sets[j][1] * 256 ]) )
+                    seg[j].append( list(signal[int(interval_sets[j][0] * 256) : int(interval_sets[j][1] * 256) ]) )
         
             for s in seg:    
                 signal_for_all_segments.append(s)
@@ -101,14 +101,16 @@ def Segments2Data(segments):
             print(labels)
             print("Read start : %d  Read end : %d"%(read_start,read_end))
             print("minus : %d sample num : %d"%(read_end-read_start, (read_end-read_start)*freq[ch_idx]))
-            print(np.shape(x))
-            print(np.shape(edf_signal))
-            print(np.shape(x_upsample))
-            print(np.shape(seg[j]))
-            print(f.getFileDuration())
-            print(name)
+            print(f'shape of x : {np.shape(x)}')
+            print(f'shape of edf_signal : {np.shape(edf_signal)}')
+            print(f'shape of signal     : {np.shape(signal)}')
+            print(f'shape_of_upsample   : {np.shape(x_upsample)}')
+            print(f'shape of seg        : {np.shape(seg[j])}')
+            print(f'file duration       : {f.getFileDuration()}')
+            print(f'filename : {name}')
             print(segment)
             print(e)
+            print(traceback.format_exc())
             sys.exit()
         skip_start = False
     if hasattr(f,'close'):
