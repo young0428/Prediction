@@ -6,6 +6,7 @@ from readDataset import LoadDataset, Interval2Segments, Segments2Data
 from AutoEncoder import FullChannelEncoder, FullChannelDecoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
+from PreProcessing import GetBatchIndexes
 
 import numpy as np
 import random
@@ -58,8 +59,8 @@ fold_n = 5
 kf = KFold(n_splits=5, shuffle=True)
 epochs = 100
 batch_size = 1000   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
-total_len = len(train_type_1)+len(train_type_2)+len(train_type_3)
-batch_num = int(total_len/batch_size)   # 한 번의 epoch당 학습 되는 횟수
+total_len = len(train_type_1)+len(train_type_2)
+total_len = int(total_len*2.5) # 데이터 비율 2:2:6
 
 type_1_kfold_set = kf.split(train_type_1)
 type_2_kfold_set = kf.split(train_type_2)
@@ -71,12 +72,25 @@ for i in range(fold_n):
     decoder_outputs = FullChannelDecoder(encoder_outputs)
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
 
+    folded_type_1_train_len = len(type_1_train)
+    folded_type_2_train_len = len(type_2_train)
+
+    (type_1_train, type_1_test) = next(type_1_kfold_set)
+    (type_2_train, type_2_test) = next(type_2_kfold_set)
+    (type_3_train, type_3_test) = next(type_3_kfold_set)
+
+    type_3_sampled_for_training_balance = random.sample(type_3_train, (folded_type_1_train_len+folded_type_2_train_len)*1.5)
+
+    
+    
+
+
+    batch_num = int(folded_train_len/batch_size)
+
+
+
 #train_dataset = Segments2Data(train_selected)
 ########### Model Set ###########
-
-
-
-
 
 
 # print(test_type_1.shape)
