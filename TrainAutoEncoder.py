@@ -12,6 +12,31 @@ import numpy as np
 import random
 import operator
 
+def autoencoder_generator(type_1_data, type_2_data, type_3_data, batch_size):
+    
+    type_1_data_len = len(type_1_data)
+    type_2_data_len = len(type_2_data)
+
+    type_3_sampled_for_balance = np.random.choice(type_3_data, int((type_1_data_len + type_2_data_len)*1.5))
+    type_3_data_len = len(type_3_sampled_for_balance)
+
+    batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
+
+    type_1_batch_indexes = GetBatchIndexes(type_1_data_len, batch_num)
+    type_2_batch_indexes = GetBatchIndexes(type_2_data_len, batch_num)
+    type_3_batch_indexes = GetBatchIndexes(type_3_data_len, batch_num)
+
+    counter = 0
+
+    while True:
+        input_seg = np.concatenate((type_1_data[type_1_batch_indexes[counter]], type_2_data[type_2_batch_indexes[counter]], type_3_data[type_3_batch_indexes[counter]]))
+        print(np.shape(input_seg))
+        X_batch = Segments2Data(input_seg)
+        counter += 1
+        yield X_batch, X_batch
+
+        if counter >= batch_num:
+            counter = 0
 
 ########### Prepare Dataset ###########
 window_size = 2
@@ -66,26 +91,51 @@ type_1_kfold_set = kf.split(train_type_1)
 type_2_kfold_set = kf.split(train_type_2)
 type_3_kfold_set = kf.split(train_type_3)
 
-for i in range(fold_n):
+for _ in range(fold_n):
     encoder_inputs = Input(shape=(21,512,1))
     encoder_outputs = FullChannelEncoder(encoded_feature_num=64,inputs = encoder_inputs)
     decoder_outputs = FullChannelDecoder(encoder_outputs)
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
+    autoencoder_model.compile(optimizer = 'Adam', loss='mse',)
 
-    folded_type_1_train_len = len(type_1_train)
-    folded_type_2_train_len = len(type_2_train)
+    (type_1_train, type_1_val) = next(type_1_kfold_set)
+    (type_2_train, type_2_val) = next(type_2_kfold_set)
+    (type_3_train, type_3_val) = next(type_3_kfold_set)
 
-    (type_1_train, type_1_test) = next(type_1_kfold_set)
-    (type_2_train, type_2_test) = next(type_2_kfold_set)
-    (type_3_train, type_3_test) = next(type_3_kfold_set)
+    type_1_data_len = len(type_1_train)
+    type_2_data_len = len(type_2_train)
+    type_3_data_len = int((type_1_data_len + type_2_data_len)*1.5)
+    train_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
 
-    type_3_sampled_for_training_balance = random.sample(type_3_train, (folded_type_1_train_len+folded_type_2_train_len)*1.5)
+    type_1_data_len = len(type_1_val)
+    type_2_data_len = len(type_2_val)
+    type_3_data_len = int((type_1_data_len + type_2_data_len)*1.5)
+    val_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
+
+
+
+
+
+    autoencoder_model.fit_generator(
+         autoencoder_generator(type_1_train,type_2_train,type_3_train,batch_size),
+         epochs = epochs,
+         steps_per_epoch =  train_batch_num,
+         )
+
+
+        
+
+
+
+
+
+
+        
 
     
+
+
     
-
-
-    batch_num = int(folded_train_len/batch_size)
 
 
 

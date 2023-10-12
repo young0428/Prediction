@@ -17,7 +17,7 @@ def FullChannelEncoder(encoded_feature_num,inputs, window_size = 2, dilated = [1
 		x = MaxPooling2D((1,2))(x)	# (None, 23, 128, 16)
 		x = SeparableConv2D(filters=32, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 23, 128, 32)
 		x = MaxPooling2D((1,2))(x)	# (None, 23, 64, 32)
-		x = SeparableConv2D(filters=2, kernel_size=(23,1), activation='relu', padding='valid')(x)	# (None, 1, 64, 2)
+		x = SeparableConv2D(filters=2, kernel_size=(channel_num,1), activation='relu', padding='valid')(x)	# (None, 1, 64, 2)
 		layers_list.append(x)
 	x = Concatenate(axis=-1)(layers_list)
 	x=  tf.squeeze(x, axis = -3)
@@ -31,7 +31,7 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq
 	x_splited = tf.split(x,len(dilated),axis=-1)
 	x_list = []
 	for i in range(len(dilated)):
-		x = Conv2DTranspose(filters=2,kernel_size=(23,1),activation='relu',padding='valid')(x_splited[i])
+		x = Conv2DTranspose(filters=2,kernel_size=(21,1),activation='relu',padding='valid')(x_splited[i])
 		x = UpSampling2D(size=(1,2))(x)
 		x = Conv2DTranspose(filters=32,kernel_size=(1,4),activation='relu',padding='same')(x)
 		x = UpSampling2D(size=(1,2))(x)
@@ -48,13 +48,14 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq
 
 
 
-"""
-inputs = Input(shape=(21,512,1))
-encoder_output = FullChannelEncoder(64,inputs)
-decoder_output = FullChannelDecoder(encoder_output)
-model = Model(inputs=inputs, outputs=decoder_output)
-model.summary()
-"""
+
+# inputs = Input(shape=(21,512,1))
+# encoder_output = FullChannelEncoder(64,inputs)
+
+#decoder_output = FullChannelDecoder(encoder_output)
+#model = Model(inputs=inputs, outputs=decoder_output)
+#model.summary()
+
 
 #tf.keras.utils.plot_model(model, to_file='model.png', show_shapes=True)
 

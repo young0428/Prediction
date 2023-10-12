@@ -26,7 +26,7 @@ def Interval2Segments(interval_list, data_path, window_size, sliding_size):
         end = interval[2]
         segment_num = int(((end-start-window_size)/sliding_size))+1
         for i in range(segment_num):
-            segments_list.append([data_path+'/'+interval[0]+'/'+interval[0]+'.edf', start, window_size])
+            segments_list.append([data_path+'/'+(interval[0].split('_'))[0]+'/'+interval[0]+'.edf', start, window_size])
             start += sliding_size
 
     return segments_list
