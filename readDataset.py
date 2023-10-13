@@ -42,9 +42,9 @@ def Segments2Data(segments):
     cnt = 0
     for idx, segment in enumerate(segments):
         if (idx+1) % (int(len(segments)/20)) == 0 :
-            cnt+=1
-            print(f"Data Loading {idx+1} / {len(segments)} ({cnt*5}%)... ")
-
+            pass
+            #cnt+=1
+            #print(f"Data Loading {idx+1} / {len(segments)} ({cnt*5}%)... ")
         if not name == segment[0]:
             name = segment[0]
             if not f == None:

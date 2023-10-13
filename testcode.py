@@ -1,16 +1,38 @@
-import pyedflib
-import natsort
-import os
-
-data_path = "D:/SNU_DATA"
-
-file_list = natsort.natsorted(os.listdir(data_path))
-
-for file_name in file_list:
-    file_path = data_path+'/'+file_name+'/'+file_name+'.edf'
-    num = int(file_name)
-    os.rename(file_path,data_path+'/'+file_name+'/SNU%03d.edf'%(num))
-    os.rename(data_path+'/'+file_name, data_path+'/SNU%03d'%(num))
-
-
-
+#!/usr/bin/env python
+"""
+Produces load on all available CPU cores
+ 
+Updated with suggestion to prevent Zombie processes
+Linted for Python 3
+Source: 
+insaner @ http://danielflannery.ie/simulate-cpu-load-with-python/#comment-34130
+"""
+from multiprocessing import Pool
+from multiprocessing import cpu_count
+ 
+import signal
+ 
+stop_loop = 0
+ 
+ 
+def exit_chld(x, y):
+    global stop_loop
+    stop_loop = 1
+ 
+ 
+def f(x):
+    global stop_loop
+    while not stop_loop:
+        x*x
+ 
+ 
+signal.signal(signal.SIGINT, exit_chld)
+ 
+if __name__ == '__main__':
+    processes = cpu_count()
+    print('-' * 20)
+    print('Running load on CPU(s)')
+    print('Utilizing %d cores' % processes)
+    print('-' * 20)
+    pool = Pool(processes)
+    pool.map(f, range(processes))

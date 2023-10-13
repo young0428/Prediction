@@ -1,17 +1,21 @@
+# %%
 from tensorflow.keras.layers import Input, Dense, Conv1D, Conv2D, Dropout, ZeroPadding2D, SeparableConv2D, UpSampling2D
 from tensorflow.keras.layers import AveragePooling1D, Flatten, Conv1DTranspose, Conv2DTranspose, Reshape, Concatenate, AveragePooling2D, MaxPooling2D
 from tensorflow.keras.models import Model
 
 from readDataset import LoadDataset, Interval2Segments, Segments2Data
-from AutoEncoder import FullChannelEncoder, FullChannelDecoder
+from AutoEncoder import FullChannelEncoder, FullChannelDecoder, FullChannelEncoder_test, FullChannelDecoder_test
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
 from PreProcessing import GetBatchIndexes
 
+import sys
 import numpy as np
 import random
 import operator
+import matplotlib as plt
 
+# %%
 def autoencoder_generator(type_1_data, type_2_data, type_3_data, batch_size):
     
     type_1_data_len = len(type_1_data)
@@ -84,7 +88,7 @@ fold_n = 5
 
 kf = KFold(n_splits=5, shuffle=True)
 epochs = 100
-batch_size = 100   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
+batch_size = 500   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
 total_len = len(train_type_1)+len(train_type_2)
 total_len = int(total_len*2.5) # 데이터 비율 2:2:6
 
@@ -94,8 +98,8 @@ type_3_kfold_set = kf.split(train_type_3)
 
 for _ in range(fold_n):
     encoder_inputs = Input(shape=(21,512,1))
-    encoder_outputs = FullChannelEncoder(encoded_feature_num=64,inputs = encoder_inputs)
-    decoder_outputs = FullChannelDecoder(encoder_outputs)
+    encoder_outputs = FullChannelEncoder_test(encoded_feature_num=64,inputs = encoder_inputs)
+    decoder_outputs = FullChannelDecoder_test(encoder_outputs)
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
     autoencoder_model.compile(optimizer = 'Adam', loss='mse',)
 
@@ -113,57 +117,15 @@ for _ in range(fold_n):
     type_3_data_len = int((type_1_data_len + type_2_data_len)*1.5)
     val_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
 
-
-    autoencoder_model.fit_generator(
-         autoencoder_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size),
-         epochs = epochs,
-         steps_per_epoch =  train_batch_num,
-         validation_data = autoencoder_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size),
-         validation_steps = val_batch_num,
-         )
-
-
-        
-
-
-
-
-
-
-        
-
-    
-
-
-    
-
-
-
-#train_dataset = Segments2Data(train_selected)
-########### Model Set ###########
-
-
-# print(test_type_1.shape)
-# print(test_type_2.shape)
-# print(test_type_3.shape)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
+# %%
+if __name__=='__main__':
+    history = autoencoder_model.fit_generator(
+            autoencoder_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size),
+            epochs = epochs,
+            steps_per_epoch =  train_batch_num,
+            validation_data = autoencoder_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size),
+            validation_steps = val_batch_num,
+            workers=8
+            )
 
 

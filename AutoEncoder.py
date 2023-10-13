@@ -25,6 +25,8 @@ def FullChannelEncoder(encoded_feature_num,inputs, window_size = 2, dilated = [1
 
 	return x
 
+
+
 def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq = 256, window_size = 2):
 	x = Reshape((1,inputs.shape[1],inputs.shape[2]))(inputs)
 	
@@ -36,6 +38,44 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq
 		x = Conv2DTranspose(filters=32,kernel_size=(1,4),activation='relu',padding='same')(x)
 		x = UpSampling2D(size=(1,2))(x)
 		x = Conv2DTranspose(filters=16,kernel_size=(1,4),activation='relu',padding='same')(x)
+		x = UpSampling2D(size=(1,2))(x)
+		x = Conv2DTranspose(filters=8,kernel_size=(1,4),activation='relu',padding='same',dilation_rate=dilated[i])(x)
+		x_list.append(x)
+
+	x = Concatenate(axis=-1)(x_list)
+	x = x[:,:,-1*freq*window_size:,:]
+	decoder_output = Conv2DTranspose(filters=1, kernel_size=(1,2),activation='relu',padding='same')(x)
+
+	return decoder_output
+
+
+def FullChannelEncoder_test(encoded_feature_num,inputs, window_size = 2, dilated = [1,2,4,8,16,32], freq = 256, 
+					   filter_num=32, stride_num = 1, channel_num = 21, pooling_rate = 8):
+	layers_list = []
+	for df in dilated:
+		x = SeparableConv2D(filters=8, kernel_size = (1,4), activation='relu',padding='same',dilation_rate=(1,df))(inputs)	# (None, 23, 512, 8)
+		#padded = ZeroPadding2D(padding=( (0,0),(df*(8-1),0) ))(x)
+		x = MaxPooling2D((1,2))(x)	# (None, 23, 256, 8)
+		x = MaxPooling2D((1,2))(x)	# (None, 23, 128, 16)
+		x = MaxPooling2D((1,2))(x)	# (None, 23, 64, 32)
+		x = SeparableConv2D(filters=2, kernel_size=(channel_num,1), activation='relu', padding='valid')(x)	# (None, 1, 64, 2)
+		layers_list.append(x)
+	x = Concatenate(axis=-1)(layers_list)
+	x=  tf.squeeze(x, axis = -3)
+	#x = Reshape((int(window_size*freq/pooling_rate),len(dilated)*2))(x)
+
+	return x
+
+
+def FullChannelDecoder_test(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq = 256, window_size = 2):
+	x = Reshape((1,inputs.shape[1],inputs.shape[2]))(inputs)
+	
+	x_splited = tf.split(x,len(dilated),axis=-1)
+	x_list = []
+	for i in range(len(dilated)):
+		x = Conv2DTranspose(filters=2,kernel_size=(21,1),activation='relu',padding='valid')(x_splited[i])
+		x = UpSampling2D(size=(1,2))(x)
+		x = UpSampling2D(size=(1,2))(x)
 		x = UpSampling2D(size=(1,2))(x)
 		x = Conv2DTranspose(filters=8,kernel_size=(1,4),activation='relu',padding='same',dilation_rate=dilated[i])(x)
 		x_list.append(x)
