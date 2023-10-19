@@ -116,7 +116,7 @@ def Segments2Data(segments):
     if hasattr(f,'close'):
          f.close()
 
-    return np.array(signal_for_all_segments)/100
+    return np.array(signal_for_all_segments)/10
 
 
 ####    test code    ####
