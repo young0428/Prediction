@@ -83,7 +83,7 @@ def Segments2Data(segments):
         try :
             for channel in channels:
                 ch_idx = labels.index(channel)
-                edf_signal = f.readSignal(ch_idx,read_start,int(freq[ch_idx]*(read_end-read_start)))
+                edf_signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*(read_end-read_start)))
                 
                 # 256 Hz이하일 경우 256Hz로 interpolation을 이용한 upsampling
                 if not freq[ch_idx] == 256:
@@ -116,7 +116,7 @@ def Segments2Data(segments):
     if hasattr(f,'close'):
          f.close()
 
-    return np.array(signal_for_all_segments)
+    return np.array(signal_for_all_segments)/100
 
 
 ####    test code    ####

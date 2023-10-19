@@ -19,7 +19,7 @@ from tensorflow.keras.utils import Sequence
 
 
 from readDataset import LoadDataset, Interval2Segments, Segments2Data
-from AutoEncoder import FullChannelEncoder, FullChannelDecoder, FullChannelEncoder_test, FullChannelDecoder_test
+from AutoEncoder import FullChannelEncoder, FullChannelDecoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
 from PreProcessing import GetBatchIndexes
@@ -58,6 +58,10 @@ class autoencoder_generator(Sequence):
     def __getitem__(self, idx):
         input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], self.type_2_data[self.type_2_batch_indexes[idx]], self.type_3_data[self.type_3_batch_indexes[idx]]))
         X_batch = Segments2Data(input_seg)
+        #min_val = tf.reduce_min(X_batch)
+        #max_val = tf.reduce_max(X_batch)
+        #X_batch = (X_batch - min_val) / (max_val - min_val)
+        #X_batch = tf.cast(X_batch, tf.float32)
         #X_batch = np.random.standard_normal((300,21,512))
         return X_batch, X_batch
 
@@ -112,7 +116,7 @@ if __name__=='__main__':
     fold_n = 5
 
     kf = KFold(n_splits=5, shuffle=True)
-    epochs = 50
+    epochs = 100
     batch_size = 500   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
     total_len = len(train_type_1)+len(train_type_2)
     total_len = int(total_len*2.5) # 데이터 비율 2:2:6
@@ -126,18 +130,19 @@ if __name__=='__main__':
         (type_1_train_indexes, type_1_val_indexes) = next(type_1_kfold_set)
         (type_2_train_indexes, type_2_val_indexes) = next(type_2_kfold_set)
         (type_3_train_indexes, type_3_val_indexes) = next(type_3_kfold_set)
+        checkpoint_path = f"AutoEncoder_training_{_}/cp.ckpt"
+        checkpoint_dir = os.path.dirname(checkpoint_path)
         if os.path.exists(f"./AutoEncoder_training_{_+1}"):
             continue
         else:
+            encoder_inputs = Input(shape=(21,512,1))
+            encoder_outputs = FullChannelEncoder(encoded_feature_num=64,inputs = encoder_inputs)
+            decoder_outputs = FullChannelDecoder(encoder_outputs)
+            autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
+            autoencoder_model.compile(optimizer = 'Adam', loss='mse',)
             if os.path.exists(f"./AutoEncoder_training_{_}"):
-                autoencoder_model = tf.keras.models.create_model()
-                autoencoder_model = tf.keras.models.load_model(f"/AutoEncoder_training_{_}/cp.ckpt")
-            else:
-                encoder_inputs = Input(shape=(21,512,1))
-                encoder_outputs = FullChannelEncoder(encoded_feature_num=64,inputs = encoder_inputs)
-                decoder_outputs = FullChannelDecoder(encoder_outputs)
-                autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
-                autoencoder_model.compile(optimizer = 'Adam', loss='mse',)
+                print("Model Loaded!")
+                autoencoder_model = tf.keras.models.load_model(checkpoint_path)
             
 
         type_1_data_len = len(type_1_train_indexes)
@@ -155,9 +160,8 @@ if __name__=='__main__':
 
         tboard_callback = tf.keras.callbacks.TensorBoard(log_dir = logs,
                                                         histogram_freq = 1,
-                                                        profile_batch = '1,20')
-        checkpoint_path = f"AutoEncoder_training_{_}/cp.ckpt"
-        checkpoint_dir = os.path.dirname(checkpoint_path)
+                                                        profile_batch = '1,400')
+        
 
         # Create a callback that saves the model's weights
         cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
@@ -174,7 +178,7 @@ if __name__=='__main__':
                     validation_data = validation_generator,
                     validation_steps = val_batch_num,
                     use_multiprocessing=True,
-                    workers=4,
+                    workers=6,
                     callbacks= [ tboard_callback, cp_callback ]
                     )
         
