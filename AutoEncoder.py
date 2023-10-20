@@ -47,7 +47,7 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq
 
 	x = Concatenate(axis=-1)(x_list)
 	x = x[:,:,-1*freq*window_size:,:]
-	decoder_output = Conv2DTranspose(filters=1, kernel_size=(1,2),activation='relu',padding='same')(x)
+	decoder_output = Conv2DTranspose(filters=1, kernel_size=(1,2),padding='same')(x)
 
 	return decoder_output
 

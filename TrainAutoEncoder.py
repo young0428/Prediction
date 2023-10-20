@@ -73,8 +73,8 @@ if __name__=='__main__':
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
-    train_info_file_path = "/host/d/SNU_DATA/patient_info_train.csv"
-    test_info_file_path = "/host/d/SNU_DATA/patient_info_test.csv"
+    train_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_train.csv"
+    test_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_test.csv"
     edf_file_path = "/host/d/SNU_DATA"
 
     ## for window
@@ -92,12 +92,10 @@ if __name__=='__main__':
     # 상대적으로 데이터 갯수가 적은 것들은 window_size 2초에 sliding_size 1초로 overlap 시켜 데이터 증강
     for state in ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early']:
         train_segments_set[state] = Interval2Segments(train_interval_set[state],edf_file_path, window_size, overlap_sliding_size)
-        test_segments_set[state] = Interval2Segments(test_interval_set[state],edf_file_path, window_size, overlap_sliding_size)
         
-
     for state in ['postictal', 'interictal']:
         train_segments_set[state] = Interval2Segments(train_interval_set[state],edf_file_path, window_size, normal_sliding_size)
-        test_segments_set[state] = Interval2Segments(test_interval_set[state],edf_file_path, window_size, normal_sliding_size)
+
 
     # type 1은 True Label데이터 preictal_ontime
     # type 2는 특별히 갯수 맞춰줘야 하는 데이터
@@ -108,10 +106,6 @@ if __name__=='__main__':
     train_type_1 = np.array(train_segments_set['preictal_ontime'])
     train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] + train_segments_set['preictal_late'])
     train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
-
-    test_type_1 = np.array(test_segments_set['preictal_ontime'])
-    test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] + test_segments_set['preictal_late'])
-    test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
 
     fold_n = 5
 
