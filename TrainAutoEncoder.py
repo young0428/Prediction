@@ -1,8 +1,7 @@
 # %%
 import os
 
-os.environ['TF_GPU_THREAD_MODE']='gpu_private'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 
 from datetime import datetime
 import sys
@@ -24,6 +23,8 @@ from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
 from PreProcessing import GetBatchIndexes
 
+os.environ['TF_GPU_THREAD_MODE']='gpu_private'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
@@ -137,7 +138,7 @@ if __name__=='__main__':
             if os.path.exists(f"./AutoEncoder_training_{_}"):
                 print("Model Loaded!")
                 autoencoder_model = tf.keras.models.load_model(checkpoint_path)
-            
+            ``
 
         type_1_data_len = len(type_1_train_indexes)
         type_2_data_len = len(type_2_train_indexes)
