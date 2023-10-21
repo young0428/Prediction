@@ -24,6 +24,8 @@ def Interval2Segments(interval_list, data_path, window_size, sliding_size):
     for interval in interval_list:
         start = interval[1]
         end = interval[2]
+        if end - start < window_size:
+            continue
         segment_num = int(((end-start-window_size)/sliding_size))+1
         for i in range(segment_num):
             segments_list.append([data_path+'/'+(interval[0].split('_'))[0]+'/'+interval[0]+'.edf', start, window_size])
@@ -80,6 +82,7 @@ def Segments2Data(segments):
         seg = []
         for i in range(len(interval_sets)):
             seg.append([])
+
         try :
             for channel in channels:
                 ch_idx = labels.index(channel)
@@ -113,8 +116,9 @@ def Segments2Data(segments):
             print(traceback.format_exc())
             sys.exit()
         skip_start = False
+    
     if hasattr(f,'close'):
-         f.close()
+        f.close()
 
     return np.array(signal_for_all_segments)/10
 

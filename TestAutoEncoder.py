@@ -57,7 +57,15 @@ if __name__=='__main__':
     checkpoint_path = "AutoEncoder_training_0/cp.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
-    autodencoder_model = tf.keras.models.load_model(checkpoint_path)
+    autoencoder_model = tf.keras.models.load_model(checkpoint_path)
+    autoencoder_model.save_weights(checkpoint_path)
+
+    encoder_input = autoencoder_model.input
+    encoder_output = autoencoder_model.get_layer("tf.compat.v1.squeeze").output
+    encoder_model = Model(inputs=encoder_input, outputs=encoder_output)
+    encoder_model.trainable = False
+
+    autoencoder_model = Model(inputs=encoder_input, outputs=autoencoder_model.output)
 
     input_type_1 = test_type_1[np.random.choice(len(test_type_1), 100, replace=False)]
     input_type_2 = test_type_2[np.random.choice(len(test_type_2), 100, replace=False)]
@@ -67,7 +75,7 @@ if __name__=='__main__':
     X_data = Segments2Data(X_seg)
 
     original_data = X_data
-    reconstructed_output = autodencoder_model.predict(X_data)
+    reconstructed_output = autoencoder_model.predict(X_data)
 
     original_data = np.squeeze(original_data)
     reconstructed_output = np.squeeze(reconstructed_output)
@@ -76,26 +84,26 @@ if __name__=='__main__':
     
     plt.subplot(2,2,1)
     rand_idx = random.randrange(0,100)
-    plt.plot(original_data[rand_idx][0],'b')
-    plt.plot(reconstructed_output[rand_idx][0],'r')
+    plt.plot(original_data[rand_idx][3],'b')
+    plt.plot(reconstructed_output[rand_idx][3],'r')
     plt.legend(labels=["Input", "Recontructed"])
 
     plt.subplot(2,2,2)
-    rand_idx = random.randrange(100,200)
-    plt.plot(original_data[rand_idx][0],'b')
-    plt.plot(reconstructed_output[rand_idx][0],'r')
+    rand_idx = random.randrange(0,100)
+    plt.plot(original_data[rand_idx][3],'b')
+    plt.plot(reconstructed_output[rand_idx][3],'r')
     plt.legend(labels=["Input", "Recontructed"])
-    
+
     plt.subplot(2,2,3)
     rand_idx = random.randrange(100,200)
-    plt.plot(original_data[rand_idx][0],'b')
-    plt.plot(reconstructed_output[rand_idx][0],'r')
+    plt.plot(original_data[rand_idx][3],'b')
+    plt.plot(reconstructed_output[rand_idx][3],'r')
     plt.legend(labels=["Input", "Recontructed"])
 
     plt.subplot(2,2,4)
     rand_idx = random.randrange(200,300)
-    plt.plot(original_data[rand_idx][0],'b')
-    plt.plot(reconstructed_output[rand_idx][0],'r')
+    plt.plot(original_data[rand_idx][3],'b')
+    plt.plot(reconstructed_output[rand_idx][3],'r')
     plt.legend(labels=["Input", "Recontructed"])
 
 
