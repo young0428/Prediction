@@ -17,11 +17,13 @@ def FullChannelEncoder(encoded_feature_num,inputs, window_size = 2, dilated = [1
 		x = MaxPooling2D((1,2))(x)	# (None, 23, 128, 16)
 		x = Conv2D(filters=16, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 23, 128, 32)
 		x = MaxPooling2D((1,2))(x)	# (None, 23, 64, 32)
-		x = Conv2D(filters=6-cnt, kernel_size=(channel_num,1), activation='relu', padding='valid')(x)	# (None, 1, 64, 2)
+		x = Conv2D(filters=6-cnt, kernel_size=(channel_num,1), padding='valid')(x)	# (None, 1, 64, 2)
 		layers_list.append(x)
 		cnt+=1
 	x = Concatenate(axis=-1)(layers_list)
 	x=  tf.squeeze(x, axis = -3) # (None, 64, 12)
+	x = Flatten()(x)
+	x = Dense(encoded_feature_num)(x)
 	#x = Reshape((int(window_size*freq/pooling_rate),len(dilated)*2))(x)
 
 	return x
@@ -29,8 +31,9 @@ def FullChannelEncoder(encoded_feature_num,inputs, window_size = 2, dilated = [1
 
 
 def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq = 256, window_size = 2):
-	# x = Reshape((1,64,12))(x)
-	x_input = Reshape((1,inputs.shape[1],inputs.shape[2]))(inputs)
+	x = Dense(64*21)(inputs)
+	x_input = Reshape((1,64,21))(x)
+	#x_input = Reshape((1,inputs.shape[1],inputs.shape[2]))(inputs)
 	# x_splited = tf.split(x,len(dilated),axis=-1)
 	x_list = []
 	cnt = 0

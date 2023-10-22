@@ -74,15 +74,17 @@ if __name__=='__main__':
     normal_sliding_size = 5
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
-    # # for window
-    # train_info_file_path = "D:/SNU_DATA/SNU_patient_info_train.csv"
-    # test_info_file_path = "D:/SNU_DATA/SNU_patient_info_test.csv"
-    # edf_file_path = "D:/SNU_DATA"
-
     # for WSL
     train_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_train.csv"
     test_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_test.csv"
     edf_file_path = "/host/d/SNU_DATA"
+
+    # #for window
+    # train_info_file_path = "D:/SNU_DATA/SNU_patient_info_train.csv"
+    # test_info_file_path = "D:/SNU_DATA/SNU_patient_info_test.csv"
+    # edf_file_path = "D:/SNU_DATA"
+
+    
 
     
 
@@ -126,14 +128,14 @@ if __name__=='__main__':
     autoencoder_model_path = "AutoEncoder_training_0/cp.ckpt"
 
     encoder_inputs = Input(shape=(21,512,1))
-    encoder_outputs = FullChannelEncoder(encoded_feature_num=64,inputs = encoder_inputs)
+    encoder_outputs = FullChannelEncoder(encoded_feature_num=128,inputs = encoder_inputs)
     decoder_outputs = FullChannelDecoder(encoder_outputs)
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
     autoencoder_model.compile(optimizer = 'Adam', loss='mse',)
     autoencoder_model.load_weights(autoencoder_model_path)
 
     encoder_input = autoencoder_model.input
-    encoder_output = autoencoder_model.get_layer("tf.compat.v1.squeeze").output
+    encoder_output = autoencoder_model.get_layer("dense").output
     encoder_model = Model(inputs=encoder_input, outputs=encoder_output)
     encoder_model.trainable = False
 
@@ -156,7 +158,7 @@ if __name__=='__main__':
             ts_output = TimeDistributed(encoder_model)(fullmodel_input)
             lstm_output = LSTMLayer(ts_output)
             full_model = Model(inputs=fullmodel_input, outputs=lstm_output)
-            full_model.compile(optimizer = 'Adam', loss='bce')
+            full_model.compile(optimizer = 'Adam', loss='bce', metrics=[tf.keras.metrics.BinaryAccuracy()])
 
             if os.path.exists(f"./FullModel_training_{_}"):
                 print("Model Loaded!")
@@ -197,7 +199,6 @@ if __name__=='__main__':
                     validation_steps = val_batch_num,
                     use_multiprocessing=True,
                     workers=16,
-                    max_queue_size = 50,
                     callbacks= [ tboard_callback, cp_callback ]
                     )
         

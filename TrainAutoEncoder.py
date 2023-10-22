@@ -131,7 +131,7 @@ if __name__=='__main__':
             continue
         else:
             encoder_inputs = Input(shape=(21,512,1))
-            encoder_outputs = FullChannelEncoder(encoded_feature_num=64,inputs = encoder_inputs)
+            encoder_outputs = FullChannelEncoder(encoded_feature_num=128,inputs = encoder_inputs)
             decoder_outputs = FullChannelDecoder(encoder_outputs)
             autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
             autoencoder_model.compile(optimizer = 'Adam', loss='mse',)
