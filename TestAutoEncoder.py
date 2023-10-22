@@ -77,6 +77,7 @@ if __name__=='__main__':
     original_data = X_data
     reconstructed_output = autoencoder_model.predict(X_data)
 
+
     original_data = np.squeeze(original_data)
     reconstructed_output = np.squeeze(reconstructed_output)
 
