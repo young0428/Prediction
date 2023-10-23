@@ -15,7 +15,8 @@ def LSTMLayer(inputs,cell_num = 32):
     
     x = LSTM(cell_num,return_sequences=True)(inputs)
     x = Flatten()(x)
-    x = Dense(32,activation='relu')
+    x = Dense(32,activation='relu')(x)
+    x = Dropout(0.2)(x)
     x = Dense(2)(x)
 
     return x
