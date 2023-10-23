@@ -44,8 +44,8 @@ class FullModel_generator(Sequence):
         self.type_1_data_len = len(type_1_data)
         self.type_2_data_len = len(type_2_data)
         
-        type_3_sampled_for_balance = type_3_data[np.random.choice(len(type_3_data), int((self.type_1_data_len + self.type_2_data_len)*1.5),replace=False)]
-        self.type_3_data_len = len(type_3_sampled_for_balance)
+        self.type_3_sampled_for_balance = type_3_data[np.random.choice(len(type_3_data), int((self.type_1_data_len + self.type_2_data_len)*1.5),replace=False)]
+        self.type_3_data_len = len(self.type_3_sampled_for_balance)
 
         self.batch_num = int((self.type_1_data_len + self.type_2_data_len + self.type_3_data_len)/batch_size)
 
@@ -57,9 +57,15 @@ class FullModel_generator(Sequence):
         return self.batch_num
     
     def __getitem__(self, idx):
-        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], self.type_2_data[self.type_2_batch_indexes[idx]], self.type_3_data[self.type_3_batch_indexes[idx]]))
+        if (idx+1) % int(self.batch_num / 5) == 0:
+             self.type_3_sampled_for_balance = self.type_3_data[np.random.choice(len(self.type_3_data), int((self.type_1_data_len + self.type_2_data_len)*1.5),replace=False)]
+             self.type_3_batch_indexes = GetBatchIndexes(self.type_3_data_len, self.batch_num)
+        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], self.type_2_data[self.type_2_batch_indexes[idx]], self.type_3_sampled_for_balance[self.type_3_batch_indexes[idx]]))
         y_batch = np.concatenate( ( np.ones(len(self.type_1_batch_indexes[idx])), (np.zeros(len(self.type_2_batch_indexes[idx]))), (np.zeros(len(self.type_3_batch_indexes[idx]))) )  )
-        y_batch += 0.05 * np.random.uniform(size = np.shape(y_batch))
+        y_batch = y_batch.tolist()
+        y_batch = list(map(int,y_batch))
+        y_batch = np.eye(2)[y_batch]
+        #y_batch += 0.05 * np.random.uniform(size = np.shape(y_batch))
         data = Segments2Data(input_seg) # (batch, eeg_channel, data)
         x_batch = np.split(data, 10, axis=-1) # (10, batch, eeg_channel, data)
         x_batch = np.transpose(x_batch,(1,0,2,3))
@@ -123,13 +129,12 @@ if __name__=='__main__':
     type_2_kfold_set = kf.split(train_type_2)
     type_3_kfold_set = kf.split(train_type_3)
 
-    autoencoder_model_path = "AutoEncoder_training_0/cp.ckpt"
+    autoencoder_model_path = "feature_64_21/cp.ckpt"
 
     encoder_inputs = Input(shape=(21,512,1))
     encoder_outputs = FullChannelEncoder(encoded_feature_num=64,inputs = encoder_inputs)
     decoder_outputs = FullChannelDecoder(encoder_outputs)
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
-    autoencoder_model.compile(optimizer = 'Adam', loss='mse',)
     autoencoder_model.load_weights(autoencoder_model_path)
 
     encoder_input = autoencoder_model.input
@@ -156,7 +161,8 @@ if __name__=='__main__':
             ts_output = TimeDistributed(encoder_model)(fullmodel_input)
             lstm_output = LSTMLayer(ts_output)
             full_model = Model(inputs=fullmodel_input, outputs=lstm_output)
-            full_model.compile(optimizer = 'Adam', loss='bce')
+            full_model.compile(optimizer = 'Adam',metrics=['acc'] ,loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.05))
+
 
             if os.path.exists(f"./FullModel_training_{_}"):
                 print("Model Loaded!")

@@ -54,7 +54,7 @@ if __name__=='__main__':
     test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] + test_segments_set['preictal_late'])
     test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
 
-    checkpoint_path = "AutoEncoder_training_0/cp.ckpt"
+    checkpoint_path = "feature_64_21/cp.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     autoencoder_model = tf.keras.models.load_model(checkpoint_path)

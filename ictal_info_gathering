@@ -1,0 +1,5 @@
+          
+y_batch = y_batch.tolist()
+y_batch = list(map(int,y_batch))
+y_batch = np.eye(2)[y_batch]
+          #y_batch += 0.05 * np.random.uniform(size = np.shape(y_batch))
