@@ -13,10 +13,10 @@ def LSTMLayer(inputs,cell_num = 32):
     #x = Reshape((10*64*21))(inputs)
     #x = Dense(32)(x)
     
-    x = LSTM(cell_num)(inputs)
-    x = Dense(64,activation='relu')(x)
-    x = Dense(128,activation='relu')(x)
-    x = Dense(1,activation='sigmoid')(x)
+    x = LSTM(cell_num,return_sequences=True)(inputs)
+    x = Flatten()(x)
+    x = Dense(32,activation='relu')
+    x = Dense(2)(x)
 
     return x
 
