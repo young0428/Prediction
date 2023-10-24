@@ -61,7 +61,7 @@ if __name__=='__main__':
     autoencoder_model.save_weights(checkpoint_path)
 
     encoder_input = autoencoder_model.input
-    encoder_output = autoencoder_model.get_layer("tf.compat.v1.squeeze").output
+    encoder_output = autoencoder_model.get_layer("dense").output
     encoder_model = Model(inputs=encoder_input, outputs=encoder_output)
     encoder_model.trainable = False
 
@@ -76,7 +76,6 @@ if __name__=='__main__':
 
     original_data = X_data
     reconstructed_output = autoencoder_model.predict(X_data)
-    print(np.shape())
 
     original_data = np.squeeze(original_data)
     reconstructed_output = np.squeeze(reconstructed_output)

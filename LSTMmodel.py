@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Input, Dense, Conv1D, Conv2D, LSTM, Dropout, ZeroPadding2D, SeparableConv2D, UpSampling2D, TimeDistributed
+from tensorflow.keras.layers import Input, Dense, Conv1D, Conv2D, LSTM, Dropout, ZeroPadding2D, SeparableConv2D, UpSampling2D, TimeDistributed, Bidirectional
 from tensorflow.keras.layers import AveragePooling1D, Flatten, Conv1DTranspose, Conv2DTranspose, Reshape, Concatenate, AveragePooling2D, MaxPooling2D
 from tensorflow.keras.models import Model
 import tensorflow as tf
@@ -6,14 +6,8 @@ import numpy as np
 
 from tensorflow.keras import Sequential
 
-def LSTMLayer(inputs,cell_num = 32):
-    # Flatten
-
-    #x = Reshape((10,64*21))(inputs)
-    #x = Reshape((10*64*21))(inputs)
-    #x = Dense(32)(x)
-    
-    x = LSTM(cell_num,return_sequences=True)(inputs)
+def LSTMLayer(inputs,cell_num = 64):
+    x = Bidirectional(LSTM(cell_num,return_sequences=True))(inputs)
     x = Flatten()(x)
     x = Dense(32,activation='relu')(x)
     x = Dropout(0.2)(x)

@@ -37,6 +37,7 @@ if gpus:
 class FullModel_generator(Sequence):
     def __init__(self,type_1_data, type_2_data, type_3_data, batch_size):
         
+        self.ratio = [5,4,3,2]
         self.type_1_data = type_1_data
         self.type_2_data = type_2_data
         self.type_3_data = type_3_data
@@ -44,8 +45,8 @@ class FullModel_generator(Sequence):
         self.type_1_data_len = len(type_1_data)
         self.type_2_data_len = len(type_2_data)
         
-        type_3_sampled_for_balance = type_3_data[np.random.choice(len(type_3_data), int((self.type_1_data_len + self.type_2_data_len)*1.5),replace=False)]
-        self.type_3_data_len = len(type_3_sampled_for_balance)
+        self.type_3_sampled_for_balance = type_3_data[np.random.choice(len(type_3_data), int((self.type_1_data_len + self.type_2_data_len)*1.5),replace=False)]
+        self.type_3_data_len = len(self.type_3_sampled_for_balance)
 
         self.batch_num = int((self.type_1_data_len + self.type_2_data_len + self.type_3_data_len)/batch_size)
 
@@ -60,18 +61,20 @@ class FullModel_generator(Sequence):
         return self.batch_num
     
     def __getitem__(self, idx):
-        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], self.type_2_data[self.type_2_batch_indexes[idx]], self.type_3_data[self.type_3_batch_indexes[idx]]))
+        if (idx+1) % int(self.batch_num / 5) == 0:
+            self.type_3_sampled_for_balance = self.type_3_data[ np.random.choice(len(self.type_3_data), int((self.type_1_data_len  self.type_2_data_len)*1.5),replace=False) ]
+            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_data_len, self.batch_num)
+
+        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], self.type_2_data[self.type_2_batch_indexes[idx]], self.type_3_sampled_for_balance[self.type_3_batch_indexes[idx]]))
         y_batch = np.concatenate( ( np.ones(len(self.type_1_batch_indexes[idx])), (np.zeros(len(self.type_2_batch_indexes[idx]))), (np.zeros(len(self.type_3_batch_indexes[idx]))) )  )
         
         y_batch = y_batch.tolist()
         y_batch = list(map(int,y_batch))
         y_batch = np.eye(2)[y_batch]
-        #y_batch += 0.05 * np.random.uniform(size = np.shape(y_batch))
         
         data = Segments2Data(input_seg) # (batch, eeg_channel, data)
         x_batch = np.split(data, 10, axis=-1) # (10, batch, eeg_channel, data)
         x_batch = np.transpose(x_batch,(1,0,2,3))
-
 
         return x_batch, y_batch
 
@@ -125,9 +128,8 @@ if __name__=='__main__':
 
     kf = KFold(n_splits=5, shuffle=True)
     epochs = 100
-    batch_size = 300   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
-    total_len = len(train_type_1)+len(train_type_2)
-    total_len = int(total_len*2.5) # 데이터 비율 2:2:6
+    batch_size = 500   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
+     # 데이터 비율 2:2:6
 
     type_1_kfold_set = kf.split(train_type_1)
     type_2_kfold_set = kf.split(train_type_2)
@@ -205,7 +207,7 @@ if __name__=='__main__':
                     validation_data = validation_generator,
                     validation_steps = val_batch_num,
                     use_multiprocessing=True,
-                    workers=16,
+                    workers=24,
                     callbacks= [ tboard_callback, cp_callback ]
                     )
         

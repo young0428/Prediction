@@ -59,11 +59,6 @@ class autoencoder_generator(Sequence):
     def __getitem__(self, idx):
         input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], self.type_2_data[self.type_2_batch_indexes[idx]], self.type_3_data[self.type_3_batch_indexes[idx]]))
         X_batch = Segments2Data(input_seg)
-        #min_val = tf.reduce_min(X_batch)
-        #max_val = tf.reduce_max(X_batch)
-        #X_batch = (X_batch - min_val) / (max_val - min_val)
-        #X_batch = tf.cast(X_batch, tf.float32)
-        #X_batch = np.random.standard_normal((300,21,512))
         return X_batch, X_batch
 
 # %%
@@ -131,7 +126,7 @@ if __name__=='__main__':
             continue
         else:
             encoder_inputs = Input(shape=(21,512,1))
-            encoder_outputs = FullChannelEncoder(encoded_feature_num=128,inputs = encoder_inputs)
+            encoder_outputs = FullChannelEncoder(encoded_feature_num=512,inputs = encoder_inputs)
             decoder_outputs = FullChannelDecoder(encoder_outputs)
             autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
             autoencoder_model.compile(optimizer = 'Adam', loss='mse',)
