@@ -37,36 +37,50 @@ if gpus:
 class FullModel_generator(Sequence):
     def __init__(self,type_1_data, type_2_data, type_3_data, batch_size):
         
-        self.ratio = [5,4,3,2]
+        self.ratio_type_1 = [5,4,3,2]
+        self.ratio_type_2 = [3,3,3,2]
+        self.ratio_type_3 = [2,3,4,6]
+        self.batch_size = batch_size
+        self.epoch = 0
+
         self.type_1_data = type_1_data
         self.type_2_data = type_2_data
         self.type_3_data = type_3_data
 
-        self.type_1_data_len = len(type_1_data)
-        self.type_2_data_len = len(type_2_data)
-        
-        self.type_3_sampled_for_balance = type_3_data[np.random.choice(len(type_3_data), int((self.type_1_data_len + self.type_2_data_len)*1.5),replace=False)]
-        self.type_3_data_len = len(self.type_3_sampled_for_balance)
+        self.update_data()
 
-        self.batch_num = int((self.type_1_data_len + self.type_2_data_len + self.type_3_data_len)/batch_size)
+    def on_epoch_end(self):
+        self.epoch += 1
+        self.update_data()
 
-        self.type_1_batch_indexes = GetBatchIndexes(self.type_1_data_len, self.batch_num)
-        self.type_2_batch_indexes = GetBatchIndexes(self.type_2_data_len, self.batch_num)
-        self.type_3_batch_indexes = GetBatchIndexes(self.type_3_data_len, self.batch_num)
+    def update_data(self):
+        if self.epoch/2 < 4:
+            self.type_1_sampled_len = len(self.type_1_data)
+            self.type_2_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/2)])*self.ratio_type_2[int(self.epoch/2)])
+            self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/2)])*self.ratio_type_3[int(self.epoch/2)])
+            self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
+            self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
 
-        self.iden_mat = np.eye(2)
-        
+            self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
+            self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
+
+            self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
+            
+            self.type_1_batch_indexes = GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
+            self.type_2_batch_indexes = GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
+            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+    
 
     def __len__(self):
         return self.batch_num
     
     def __getitem__(self, idx):
-        if (idx+1) % int(self.batch_num / 5) == 0:
-            self.type_3_sampled_for_balance = self.type_3_data[ np.random.choice(len(self.type_3_data), int((self.type_1_data_len  self.type_2_data_len)*1.5),replace=False) ]
-            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_data_len, self.batch_num)
-
-        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], self.type_2_data[self.type_2_batch_indexes[idx]], self.type_3_sampled_for_balance[self.type_3_batch_indexes[idx]]))
-        y_batch = np.concatenate( ( np.ones(len(self.type_1_batch_indexes[idx])), (np.zeros(len(self.type_2_batch_indexes[idx]))), (np.zeros(len(self.type_3_batch_indexes[idx]))) )  )
+        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
+                                    self.type_2_sampled[self.type_2_batch_indexes[idx]], 
+                                    self.type_3_sampled[self.type_3_batch_indexes[idx]]))
+        y_batch = np.concatenate( ( np.ones(len(self.type_1_batch_indexes[idx])), 
+                                   (np.zeros(len(self.type_2_batch_indexes[idx]))), 
+                                   (np.zeros(len(self.type_3_batch_indexes[idx]))) )  )
         
         y_batch = y_batch.tolist()
         y_batch = list(map(int,y_batch))
@@ -76,7 +90,14 @@ class FullModel_generator(Sequence):
         x_batch = np.split(data, 10, axis=-1) # (10, batch, eeg_channel, data)
         x_batch = np.transpose(x_batch,(1,0,2,3))
 
+        if (idx+1) % int(self.batch_num / 5) == 0:
+            self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
+            self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
+            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+
         return x_batch, y_batch
+    
+    
 
 # %%
 if __name__=='__main__':
@@ -138,7 +159,7 @@ if __name__=='__main__':
     autoencoder_model_path = "AutoEncoder_training_0/cp.ckpt"
 
     encoder_inputs = Input(shape=(21,512,1))
-    encoder_outputs = FullChannelEncoder(encoded_feature_num=128,inputs = encoder_inputs)
+    encoder_outputs = FullChannelEncoder(encoded_feature_num=512,inputs = encoder_inputs)
     decoder_outputs = FullChannelDecoder(encoder_outputs)
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
     autoencoder_model.load_weights(autoencoder_model_path)
@@ -183,13 +204,13 @@ if __name__=='__main__':
         type_2_data_len = len(type_2_val_indexes)
         type_3_data_len = int((type_1_data_len + type_2_data_len)*1.5)
         val_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
-        logs = "logs/lstm" + datetime.now().strftime("%Y%m%d-%H%M%S")
+        logs = "logs/lstm_512"
 
         
 
         tboard_callback = tf.keras.callbacks.TensorBoard(log_dir = logs,
                                                         histogram_freq = 1,
-                                                        profile_batch = '1,50')
+                                                        profile_batch = '100,200')
         
 
         # Create a callback that saves the model's weights
