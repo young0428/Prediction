@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Input, Dense, Conv1D, Conv2D, Dropout, ZeroPadding2D, SeparableConv2D, UpSampling2D
+from tensorflow.keras.layers import Input, Dense, Conv1D, Conv2D, Dropout, ZeroPadding2D, SeparableConv2D, UpSampling2D, BatchNormalization, ReLU
 from tensorflow.keras.layers import AveragePooling1D, Flatten, Conv1DTranspose, Conv2DTranspose, Reshape, Concatenate, AveragePooling2D, MaxPooling2D
 from tensorflow.keras.models import Model
 import tensorflow as tf
@@ -11,13 +11,21 @@ def FullChannelEncoder(encoded_feature_num,inputs, window_size = 2, dilated = [1
 	layers_list = []
 	cnt = 0
 	for df in dilated:
-		x = Conv2D(filters=8, kernel_size = (1,4), activation='relu',padding='same',dilation_rate=(1,df))(inputs)	# (None, 23, 512, 8)
+		x = Conv2D(filters=8, kernel_size = (1,4),padding='same',dilation_rate=(1,df))(inputs)	# (None, 23, 512, 8)
+		x = BatchNormalization()(x)
+		x = ReLU()(x)
 		x = MaxPooling2D((1,2))(x)	# (None, 23, 256, 8)
-		x = Conv2D(filters=8, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 23, 256, 16)
+		x = Conv2D(filters=8, kernel_size=(1,4),padding='same')(x)	# (None, 23, 256, 16)
+		x = BatchNormalization()(x)
+		x = ReLU()(x)
 		x = MaxPooling2D((1,2))(x)	# (None, 23, 128, 16)
-		x = Conv2D(filters=16, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 23, 128, 32)
+		x = Conv2D(filters=16, kernel_size=(1,4),padding='same')(x)	# (None, 23, 128, 32)
+		x = BatchNormalization()(x)
+		x = ReLU()(x)
 		x = MaxPooling2D((1,2))(x)	# (None, 23, 64, 32)
 		x = Conv2D(filters=6-cnt, kernel_size=(channel_num,1), padding='valid')(x)	# (None, 1, 64, 2)
+		x = BatchNormalization()(x)
+		x = ReLU()(x)
 		layers_list.append(x)
 		cnt+=1
 	x = Concatenate(axis=-1)(layers_list)
@@ -32,6 +40,8 @@ def FullChannelEncoder(encoded_feature_num,inputs, window_size = 2, dilated = [1
 
 def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq = 256, window_size = 2):
 	x = Dense(64*21)(inputs)
+	x = BatchNormalization()(x)
+	x = ReLU()(x)
 	x_input = Reshape((1,64,21))(x)
 	#x_input = Reshape((1,inputs.shape[1],inputs.shape[2]))(inputs)
 	# x_splited = tf.split(x,len(dilated),axis=-1)
@@ -40,12 +50,18 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq
 	sum = 0
 	for i in range(len(dilated)):
 		x = Conv2DTranspose(filters=6-cnt,kernel_size=(21,1),activation='relu',padding='valid')(x_input[:,:,:,sum:sum+(6-cnt)])
+		x = BatchNormalization()(x)
+		x = ReLU()(x)
 		x = UpSampling2D(size=(1,2))(x)
-		x = Conv2DTranspose(filters=16,kernel_size=(1,4),activation='relu',padding='same')(x)
+		x = Conv2DTranspose(filters=16,kernel_size=(1,4),padding='same')(x)
+		x = BatchNormalization()(x)
+		x = ReLU()(x)
 		x = UpSampling2D(size=(1,2))(x)
-		x = Conv2DTranspose(filters=8,kernel_size=(1,4),activation='relu',padding='same')(x)
+		x = Conv2DTranspose(filters=8,kernel_size=(1,4),padding='same')(x)
+		x = BatchNormalization()(x)
+		x = ReLU()(x)
 		x = UpSampling2D(size=(1,2))(x)
-		x = Conv2DTranspose(filters=8,kernel_size=(1,4),activation='relu',padding='same',dilation_rate=dilated[i])(x)
+		x = Conv2DTranspose(filters=8,kernel_size=(1,4),padding='same',dilation_rate=dilated[i])(x)
 		x_list.append(x)
 		sum += 6-cnt
 		cnt+=1

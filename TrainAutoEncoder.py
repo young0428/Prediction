@@ -40,12 +40,13 @@ class autoencoder_generator(Sequence):
         self.type_1_data = type_1_data
         self.type_2_data = type_2_data
         self.type_3_data = type_3_data
+        self.first_epoch = True
 
         self.type_1_data_len = len(type_1_data)
         self.type_2_data_len = len(type_2_data)
         
-        type_3_sampled_for_balance = type_3_data[np.random.choice(len(type_3_data), int((self.type_1_data_len + self.type_2_data_len)*1.5),replace=False)]
-        self.type_3_data_len = len(type_3_sampled_for_balance)
+        self.type_3_sampled_for_balance = type_3_data[np.random.choice(len(type_3_data), int((self.type_1_data_len + self.type_2_data_len)*1.5),replace=False)]
+        self.type_3_data_len = len(self.type_3_sampled_for_balance)
 
         self.batch_num = int((self.type_1_data_len + self.type_2_data_len + self.type_3_data_len)/batch_size)
 
@@ -57,8 +58,11 @@ class autoencoder_generator(Sequence):
         return self.batch_num
     
     def __getitem__(self, idx):
-        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], self.type_2_data[self.type_2_batch_indexes[idx]], self.type_3_data[self.type_3_batch_indexes[idx]]))
+        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
+                                    self.type_2_data[self.type_2_batch_indexes[idx]], 
+                                    self.type_3_sampled_for_balance[self.type_3_batch_indexes[idx]]))
         X_batch = Segments2Data(input_seg)
+  
         return X_batch, X_batch
 
 # %%
@@ -159,8 +163,16 @@ if __name__=='__main__':
                                                         save_best_only=True,
                                                         verbose=1)
         
-        train_generator = autoencoder_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size)
-        validation_generator = autoencoder_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size)
+        train_generator = autoencoder_generator(train_type_1[type_1_train_indexes], 
+                                                train_type_2[type_2_train_indexes],
+                                                train_type_3[type_3_train_indexes],
+                                                batch_size
+                                                )
+        validation_generator = autoencoder_generator(train_type_1[type_1_val_indexes], 
+                                                     train_type_2[type_2_val_indexes],
+                                                     train_type_3[type_3_val_indexes],
+                                                     batch_size
+                                                             )
 # %%
         history = autoencoder_model.fit_generator(
                     train_generator,
