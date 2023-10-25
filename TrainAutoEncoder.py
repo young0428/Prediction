@@ -37,31 +37,55 @@ if gpus:
 class autoencoder_generator(Sequence):
     def __init__(self,type_1_data, type_2_data, type_3_data, batch_size):
         
+        self.ratio_type_1 = [5,4,3,2]
+        self.ratio_type_2 = [3,3,3,2]
+        self.ratio_type_3 = [2,3,4,6]
+        self.batch_size = batch_size
+        self.epoch = 0
+        self.update_period = 5
         self.type_1_data = type_1_data
         self.type_2_data = type_2_data
         self.type_3_data = type_3_data
-        self.first_epoch = True
 
-        self.type_1_data_len = len(type_1_data)
-        self.type_2_data_len = len(type_2_data)
-        
-        self.type_3_sampled_for_balance = type_3_data[np.random.choice(len(type_3_data), int((self.type_1_data_len + self.type_2_data_len)*1.5),replace=False)]
-        self.type_3_data_len = len(self.type_3_sampled_for_balance)
+        self.update_data()
 
-        self.batch_num = int((self.type_1_data_len + self.type_2_data_len + self.type_3_data_len)/batch_size)
-
-        self.type_1_batch_indexes = GetBatchIndexes(self.type_1_data_len, self.batch_num)
-        self.type_2_batch_indexes = GetBatchIndexes(self.type_2_data_len, self.batch_num)
-        self.type_3_batch_indexes = GetBatchIndexes(self.type_3_data_len, self.batch_num)
+    def on_epoch_end(self):
+        self.epoch += 1
+        self.update_data()
 
     def __len__(self):
         return self.batch_num
+
+    def update_data(self):
+        # 데이터 밸런스를 위해 데이터 밸런스 조절 및 resampling
+        if self.epoch/self.update_period < 4:
+            # ratio에 따라 데이터 갯수 정함
+            self.type_1_sampled_len = len(self.type_1_data)
+            self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/self.update_period)])*self.ratio_type_2[int(self.epoch/self.update_period)]),len(self.type_2_data))
+            self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/self.update_period)])*self.ratio_type_3[int(self.epoch/self.update_period)])
+            # Sampling mask 생성
+            self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
+            self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
+
+            self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
+            self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
+
+            self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
+            
+            self.type_1_batch_indexes = GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
+            self.type_2_batch_indexes = GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
+            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
     
     def __getitem__(self, idx):
         input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
-                                    self.type_2_data[self.type_2_batch_indexes[idx]], 
-                                    self.type_3_sampled_for_balance[self.type_3_batch_indexes[idx]]))
+                                    self.type_2_sampled[self.type_2_batch_indexes[idx]], 
+                                    self.type_3_sampled[self.type_3_batch_indexes[idx]]))
         X_batch = Segments2Data(input_seg)
+
+        if (idx+1) % int(self.batch_num / 5) == 0:
+            self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
+            self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
+            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
   
         return X_batch, X_batch
 
