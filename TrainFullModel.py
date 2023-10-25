@@ -42,10 +42,11 @@ class FullModel_generator(Sequence):
         self.ratio_type_3 = [2,3,4,6]
         self.batch_size = batch_size
         self.epoch = 0
-
+        self.update_period = 20
         self.type_1_data = type_1_data
         self.type_2_data = type_2_data
         self.type_3_data = type_3_data
+
 
         self.update_data()
 
@@ -54,10 +55,13 @@ class FullModel_generator(Sequence):
         self.update_data()
 
     def update_data(self):
-        if self.epoch/2 < 4:
+        # 데이터 밸런스를 위해 데이터 밸런스 조절 및 resampling
+        if self.epoch/self.update_period < 4:
+            # ratio에 따라 데이터 갯수 정함
             self.type_1_sampled_len = len(self.type_1_data)
-            self.type_2_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/2)])*self.ratio_type_2[int(self.epoch/2)])
-            self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/2)])*self.ratio_type_3[int(self.epoch/2)])
+            self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/self.update_period)])*self.ratio_type_2[int(self.epoch/self.update_period)]),len(self.type_2_data))
+            self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/self.update_period)])*self.ratio_type_3[int(self.epoch/self.update_period)])
+            # Sampling mask 생성
             self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
 
@@ -70,7 +74,6 @@ class FullModel_generator(Sequence):
             self.type_2_batch_indexes = GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
             self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
     
-
     def __len__(self):
         return self.batch_num
     
@@ -96,14 +99,12 @@ class FullModel_generator(Sequence):
             self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
 
         return x_batch, y_batch
-    
-    
 
 # %%
 if __name__=='__main__':
     window_size = 20
-    overlap_sliding_size = 1
-    normal_sliding_size = 5
+    overlap_sliding_size = 10
+    normal_sliding_size = 20
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
@@ -116,10 +117,6 @@ if __name__=='__main__':
     # test_info_file_path = "D:/SNU_DATA/SNU_patient_info_test.csv"
     # edf_file_path = "D:/SNU_DATA"
 
-    
-
-    
-
 
     train_interval_set = LoadDataset(train_info_file_path)
     train_segments_set = {}
@@ -130,11 +127,12 @@ if __name__=='__main__':
     # 상대적으로 데이터 갯수가 적은 것들은 window_size 2초에 sliding_size 1초로 overlap 시켜 데이터 증강
     for state in ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early']:
         train_segments_set[state] = Interval2Segments(train_interval_set[state],edf_file_path, window_size, overlap_sliding_size)
+        test_segments_set[state] = Interval2Segments(test_interval_set[state],edf_file_path, window_size, overlap_sliding_size)
         
     for state in ['postictal', 'interictal']:
         train_segments_set[state] = Interval2Segments(train_interval_set[state],edf_file_path, window_size, normal_sliding_size)
-
-
+        test_segments_set[state] = Interval2Segments(test_interval_set[state],edf_file_path, window_size, normal_sliding_size)
+    
     # type 1은 True Label데이터 preictal_ontime
     # type 2는 특별히 갯수 맞춰줘야 하는 데이터
     # type 3는 나머지
@@ -144,6 +142,10 @@ if __name__=='__main__':
     train_type_1 = np.array(train_segments_set['preictal_ontime'])
     train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] + train_segments_set['preictal_late'])
     train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
+
+    test_type_1 = np.array(test_segments_set['preictal_ontime'])
+    test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] + test_segments_set['preictal_late'])
+    test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
 
     fold_n = 5
 
@@ -188,7 +190,7 @@ if __name__=='__main__':
             ts_output = TimeDistributed(encoder_model)(fullmodel_input)
             lstm_output = LSTMLayer(ts_output)
             full_model = Model(inputs=fullmodel_input, outputs=lstm_output)
-            full_model.compile(optimizer = 'Adam',metrics=['acc'] ,loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1))
+            full_model.compile(optimizer = 'Adam',metrics=['acc'] ,loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.2))
 
             if os.path.exists(f"./FullModel_training_{_}"):
                 print("Model Loaded!")
@@ -204,6 +206,12 @@ if __name__=='__main__':
         type_2_data_len = len(type_2_val_indexes)
         type_3_data_len = int((type_1_data_len + type_2_data_len)*1.5)
         val_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
+
+        type_1_data_len = len(test_type_1)
+        type_2_data_len = len(test_type_2)
+        type_3_data_len = len(test_type_3)
+        test_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
+
         logs = "logs/lstm_512"
 
         
@@ -220,13 +228,14 @@ if __name__=='__main__':
         
         train_generator = FullModel_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size)
         validation_generator = FullModel_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size)
+        test_generator = FullModel_generator(test_type_1, test_type_2, test_type_3, batch_size)
 # %%
         history = full_model.fit_generator(
                     train_generator,
                     epochs = epochs,
                     steps_per_epoch =  train_batch_num,
-                    validation_data = validation_generator,
-                    validation_steps = val_batch_num,
+                    validation_data = test_generator,
+                    validation_steps = test_batch_num,
                     use_multiprocessing=True,
                     workers=24,
                     callbacks= [ tboard_callback, cp_callback ]

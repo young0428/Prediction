@@ -65,6 +65,10 @@ if __name__=='__main__':
 
     X_seg = np.concatenate((input_type_1,input_type_2,input_type_3))
     y_batch = np.concatenate( ( np.ones(len(input_type_1)), (np.zeros(len(input_type_2))), (np.zeros(len(input_type_3))) )  )
+    y_batch = y_batch.tolist()
+    y_batch = list(map(int,y_batch))
+    y_batch = np.eye(2)[y_batch]
+
     X_data = Segments2Data(X_seg)
     x_batch = np.split(X_data, 10, axis=-1) # (10, batch, eeg_channel, data)
     x_batch = np.transpose(x_batch,(1,0,2,3))
@@ -73,7 +77,9 @@ if __name__=='__main__':
     #predict_y = fullmodel.predict(x_batch)
     #predict_y = tf.round(predict_y)
 
-    fullmodel.evaluate(x_batch,y_batch)
+    y_predict = fullmodel.predict(x_batch)
+    print(y_predict)
+    print(y_batch)
 
 
 

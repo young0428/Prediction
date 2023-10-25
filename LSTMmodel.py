@@ -8,8 +8,10 @@ from tensorflow.keras import Sequential
 
 def LSTMLayer(inputs,cell_num = 64):
     x = Bidirectional(LSTM(cell_num,return_sequences=True))(inputs)
-    x = Flatten()(x)
-    x = Dense(32,activation='relu')(x)
+    x = Bidirectional(LSTM(cell_num))(x)
+    x = Dense(128,activation='relu')(x)
+    x = Dropout(0.2)(x)
+    x = Dense(256,activation='relu')(x)
     x = Dropout(0.2)(x)
     x = Dense(2)(x)
 
