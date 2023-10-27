@@ -161,13 +161,13 @@ if __name__=='__main__':
     autoencoder_model_path = "AutoEncoder_training_0/cp.ckpt"
 
     encoder_inputs = Input(shape=(21,512,1))
-    encoder_outputs = FullChannelEncoder(encoded_feature_num=512,inputs = encoder_inputs)
+    encoder_outputs = FullChannelEncoder(inputs = encoder_inputs)
     decoder_outputs = FullChannelDecoder(encoder_outputs)
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
     autoencoder_model.load_weights(autoencoder_model_path)
 
     encoder_input = autoencoder_model.input
-    encoder_output = autoencoder_model.get_layer("dense").output
+    encoder_output = autoencoder_model.get_layer("tf.compat.v1.squeeze").output
     encoder_model = Model(inputs=encoder_input, outputs=encoder_output)
     encoder_model.trainable = False
 

@@ -7,7 +7,9 @@ import numpy as np
 from tensorflow.keras import Sequential
 
 def LSTMLayer(inputs,cell_num = 64):
-    x = Bidirectional(LSTM(cell_num,return_sequences=True))(inputs)
+    #inputs = (batch, 10, 64, 21)
+    x = TimeDistributed(LSTM(32))(inputs)
+    x = Bidirectional(LSTM(cell_num,return_sequences=True))(x)
     x = Bidirectional(LSTM(cell_num))(x)
     x = Dense(128,activation='relu')(x)
     x = Dropout(0.2)(x)
@@ -16,6 +18,11 @@ def LSTMLayer(inputs,cell_num = 64):
     x = Dense(2)(x)
 
     return x
+inputs = Input(shape=(10,64,21))
+la = LSTMLayer(inputs)
+model = Model(inputs = inputs, outputs=la)
+
+model.summary()
 
 
     
