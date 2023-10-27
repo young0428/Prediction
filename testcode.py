@@ -1,6 +1,14 @@
 import numpy as np
 
-a = np.array([3,1,0])
-b = sorted(a)
+class test :
+    def __init__(self, cnt):
+        self.count = cnt
+        self.count[0] += 1
 
-print(b)
+
+a = [0]
+b = test(a)
+c = test(a)
+
+print(a)
+

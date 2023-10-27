@@ -23,8 +23,7 @@ from AutoEncoder import FullChannelEncoder, FullChannelDecoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
 from PreProcessing import GetBatchIndexes
-
-
+from TestAutoEncoder import test_ae
 
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
@@ -35,23 +34,31 @@ if gpus:
 
 # %%
 class autoencoder_generator(Sequence):
-    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size):
+    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, gen_type):
+    
+        self.ratio_type_1 = [2,2,2,2]
+        self.ratio_type_2 = [2,2,2,2]
+        self.ratio_type_3 = [6,6,6,6]
         
-        self.ratio_type_1 = [5,4,3,2]
-        self.ratio_type_2 = [3,3,3,2]
-        self.ratio_type_3 = [2,3,4,6]
         self.batch_size = batch_size
+        self.check = True
         self.epoch = 0
+        self.cnt = 0
         self.update_period = 5
         self.type_1_data = type_1_data
         self.type_2_data = type_2_data
         self.type_3_data = type_3_data
+        self.test_on = False
+        self.gen_type = gen_type
 
         self.update_data()
 
     def on_epoch_end(self):
         self.epoch += 1
-        self.update_data()
+        if self.gen_type == "train":
+            self.update_data()
+            if self.epoch % 3 == 0:
+                test_ae(self.epoch)
 
     def __len__(self):
         return self.batch_num
@@ -80,20 +87,20 @@ class autoencoder_generator(Sequence):
         input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
                                     self.type_2_sampled[self.type_2_batch_indexes[idx]], 
                                     self.type_3_sampled[self.type_3_batch_indexes[idx]]))
-        X_batch = Segments2Data(input_seg)
-
-        if (idx+1) % int(self.batch_num / 5) == 0:
+        x_batch = Segments2Data(input_seg)
+        if (idx+1) % int(self.batch_num / 3) == 0 and self.gen_type == "train":
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
             self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
             self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
   
-        return X_batch, X_batch
+        return x_batch, x_batch
 
 # %%
 if __name__=='__main__':
     window_size = 2
     overlap_sliding_size = 1
     normal_sliding_size = window_size
+    check = [True]
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
@@ -135,7 +142,7 @@ if __name__=='__main__':
 
     kf = KFold(n_splits=5, shuffle=True)
     epochs = 100
-    batch_size = 500   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
+    batch_size = 400   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
     total_len = len(train_type_1)+len(train_type_2)
     total_len = int(total_len*2.5) # 데이터 비율 2:2:6
 
@@ -190,22 +197,24 @@ if __name__=='__main__':
         train_generator = autoencoder_generator(train_type_1[type_1_train_indexes], 
                                                 train_type_2[type_2_train_indexes],
                                                 train_type_3[type_3_train_indexes],
-                                                batch_size
+                                                batch_size,
+                                                "train"
+                                                
                                                 )
         validation_generator = autoencoder_generator(train_type_1[type_1_val_indexes], 
                                                      train_type_2[type_2_val_indexes],
                                                      train_type_3[type_3_val_indexes],
-                                                     batch_size
-                                                             )
+                                                     batch_size,
+                                                     "val"
+                                                     )
 # %%
         history = autoencoder_model.fit_generator(
                     train_generator,
                     epochs = epochs,
-                    steps_per_epoch =  train_batch_num,
                     validation_data = validation_generator,
-                    validation_steps = val_batch_num,
                     use_multiprocessing=True,
                     workers=6,
+                    shuffle=False,
                     callbacks= [ tboard_callback, cp_callback ]
                     )
         

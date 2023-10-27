@@ -8,6 +8,7 @@ import pickle
 import os
 
 import tensorflow as tf
+
 from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import Sequence
@@ -20,7 +21,7 @@ from sklearn.model_selection import KFold
 from PreProcessing import GetBatchIndexes
 
 
-if __name__=='__main__':
+def test_ae(epoch):
     window_size = 2
     overlap_sliding_size = 1
     normal_sliding_size = window_size
@@ -108,7 +109,7 @@ if __name__=='__main__':
 
 
     #plt.show()
-    plt.savefig("testfig.png")
+    plt.savefig(f"./ae_test/testfig_{epoch}.png")
 
 
 
