@@ -62,7 +62,7 @@ def test_ae(epoch):
     autoencoder_model.save_weights(checkpoint_path)
 
     encoder_input = autoencoder_model.input
-    encoder_output = autoencoder_model.get_layer("dense").output
+    encoder_output = autoencoder_model.get_layer("lstm").output
     encoder_model = Model(inputs=encoder_input, outputs=encoder_output)
     encoder_model.trainable = False
 
