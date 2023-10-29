@@ -35,11 +35,18 @@ if gpus:
 
 # %%
 class FullModel_generator(Sequence):
-    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size):
-        
-        self.ratio_type_1 = [5,4,3,2]
-        self.ratio_type_2 = [3,3,3,2]
-        self.ratio_type_3 = [2,3,4,6]
+    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, gen_type):
+        if gen_type == 'train':
+            # self.ratio_type_1 = [5,4,3,2]
+            # self.ratio_type_2 = [3,3,3,2]
+            # self.ratio_type_3 = [2,3,4,6]
+            self.ratio_type_1 = [5,5,5,5]
+            self.ratio_type_2 = [3,3,3,3]
+            self.ratio_type_3 = [2,2,2,2]
+        else:
+            self.ratio_type_1 = [5,5,5,5]
+            self.ratio_type_2 = [3,3,3,3]
+            self.ratio_type_3 = [2,2,2,2]
         self.batch_size = batch_size
         self.epoch = 0
         self.update_period = 20
@@ -103,7 +110,7 @@ class FullModel_generator(Sequence):
 # %%
 if __name__=='__main__':
     window_size = 20
-    overlap_sliding_size = 10
+    overlap_sliding_size = 5
     normal_sliding_size = 20
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
@@ -167,7 +174,7 @@ if __name__=='__main__':
     autoencoder_model.load_weights(autoencoder_model_path)
 
     encoder_input = autoencoder_model.input
-    encoder_output = autoencoder_model.get_layer("dense").output
+    encoder_output = autoencoder_model.get_layer("lstm").output
     encoder_model = Model(inputs=encoder_input, outputs=encoder_output)
     encoder_model.trainable = False
 
@@ -190,7 +197,7 @@ if __name__=='__main__':
             ts_output = TimeDistributed(encoder_model)(fullmodel_input)
             lstm_output = LSTMLayer(ts_output)
             full_model = Model(inputs=fullmodel_input, outputs=lstm_output)
-            full_model.compile(optimizer = 'Adam',metrics=['acc'] ,loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.2))
+            full_model.compile(optimizer = 'Adam',metrics=['acc'] ,loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.05))
 
             if os.path.exists(f"./FullModel_training_{_}"):
                 print("Model Loaded!")
@@ -226,9 +233,9 @@ if __name__=='__main__':
                                                         save_best_only=True,
                                                         verbose=1)
         
-        train_generator = FullModel_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size)
-        validation_generator = FullModel_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size)
-        test_generator = FullModel_generator(test_type_1, test_type_2, test_type_3, batch_size)
+        train_generator = FullModel_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size, 'train')
+        validation_generator = FullModel_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size, 'val')
+        test_generator = FullModel_generator(test_type_1, test_type_2, test_type_3, batch_size, 'test')
 # %%
         history = full_model.fit_generator(
                     train_generator,
