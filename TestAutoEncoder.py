@@ -21,9 +21,10 @@ from sklearn.model_selection import KFold
 from PreProcessing import GetBatchIndexes
 
 
-def test_ae(epoch):
-    window_size = 2
-    overlap_sliding_size = 1
+def test_ae(epoch,win_size,sliding,freq):
+    window_size = win_size
+    overlap_sliding_size = sliding
+    sr = freq
     normal_sliding_size = window_size
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 

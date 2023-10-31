@@ -12,17 +12,17 @@ def FullChannelEncoder(inputs, window_size = 2, dilated = [1,2,4,8,16,32], freq 
 	layers_list = []
 	cnt = 0
 	for df in dilated:
-		x = Conv2D(filters=5, kernel_size = (1,3),padding='same',activation='relu',dilation_rate=(1,df))(inputs)	# (None, 21, 640, 5)
-		x = MaxPooling2D((1,2))(x)	# (None, 21, 320, 5)
-		x = Conv2D(filters=5, kernel_size=(1,3),activation='relu',padding='same')(x)	# (None, 21, 320, 5)
-		x = MaxPooling2D((1,2))(x)	# (None, 21, 160, 5)
-		x = Conv2D(filters=5, kernel_size=(1,3),activation='relu',padding='same')(x)	# (None, 21, 160, 5)
-		x = MaxPooling2D((1,2))(x)	# (None, 21, 80, 5)
-		x = Conv2D(filters=5, kernel_size=(channel_num,1),activation='relu', padding='valid')(x)	# (None, 1, 80, 5)
+		x = Conv2D(filters=8, kernel_size = (1,4),padding='same',activation='relu',dilation_rate=(1,df))(inputs)	# (None, 21, 640, 8)
+		x = MaxPooling2D((1,2))(x)	# (None, 21, 320, 8)
+		x = Conv2D(filters=8, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 21, 320, 8)
+		x = MaxPooling2D((1,2))(x)	# (None, 21, 160, 8)
+		x = Conv2D(filters=8, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 21, 160, 8)
+		x = MaxPooling2D((1,2))(x)	# (None, 21, 80, 8)
+		x = Conv2D(filters=8, kernel_size=(channel_num,1),activation='relu', padding='valid')(x)	# (None, 1, 80, 8)
 		layers_list.append(x)
 		cnt+=1
-	x = Concatenate(axis=-1)(layers_list) # (None, 1, 80, 30)
-	x=  tf.squeeze(x, axis = -3) # (None, 80, 30)
+	x = Concatenate(axis=-1)(layers_list) # (None, 1, 80, 48)
+	x=  tf.squeeze(x, axis = -3) # (None, 80, 48)
 
 
 	return x
@@ -35,19 +35,19 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq
 	cnt = 0
 	sum = 0
 	for i in range(len(dilated)):
-		x = Conv2DTranspose(filters=5,kernel_size=(21,1),activation='relu',padding='valid')(x_input[:,:,:,5*i:5*(i+1)])
+		x = Conv2DTranspose(filters=8,kernel_size=(21,1),activation='relu',padding='valid')(x_input[:,:,:,8*i:8*(i+1)])
 		x = UpSampling2D(size=(1,2))(x)
-		x = Conv2DTranspose(filters=5,kernel_size=(1,3),activation='relu',padding='same')(x)
+		x = Conv2DTranspose(filters=8,kernel_size=(1,4),activation='relu',padding='same')(x)
 		x = UpSampling2D(size=(1,2))(x)
-		x = Conv2DTranspose(filters=5,kernel_size=(1,3),activation='relu',padding='same')(x)
+		x = Conv2DTranspose(filters=8,kernel_size=(1,4),activation='relu',padding='same')(x)
 		x = UpSampling2D(size=(1,2))(x)
-		x = Conv2DTranspose(filters=5,kernel_size=(1,3),padding='same',activation='relu',dilation_rate=dilated[i])(x)
+		x = Conv2DTranspose(filters=8,kernel_size=(1,4),padding='same',activation='relu',dilation_rate=dilated[i])(x)
 		x_list.append(x)
 		cnt+=1
 		
 	x = Concatenate(axis=-1)(x_list)
 	x = x[:,:,-1*freq*window_size:,:]
-	decoder_output = Conv2DTranspose(filters=1, kernel_size=(1,3),padding='same')(x)
+	decoder_output = Conv2DTranspose(filters=1, kernel_size=(1,4),padding='same')(x)
 
 	return decoder_output
 

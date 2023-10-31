@@ -44,21 +44,22 @@ class autoencoder_generator(Sequence):
         self.check = True
         self.epoch = 0
         self.cnt = 0
-        self.update_period = 5
+        self.update_period = 5*2
         self.type_1_data = type_1_data
         self.type_2_data = type_2_data
         self.type_3_data = type_3_data
         self.test_on = False
+        self.ratio_idx = 0
         self.gen_type = gen_type
 
         self.update_data()
 
     def on_epoch_end(self):
         self.epoch += 1
+        self.update_data()
         if self.gen_type == "train":
-            self.update_data()
-            if self.epoch % 3 == 0:
-                test_ae(self.epoch)
+            if self.epoch % 6 == 0:
+                test_ae(int(self.epoch))
 
     def __len__(self):
         return self.batch_num
@@ -66,29 +67,33 @@ class autoencoder_generator(Sequence):
     def update_data(self):
         # 데이터 밸런스를 위해 데이터 밸런스 조절 및 resampling
         if self.epoch/self.update_period < 4:
-            # ratio에 따라 데이터 갯수 정함
-            self.type_1_sampled_len = len(self.type_1_data)
-            self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/self.update_period)])*self.ratio_type_2[int(self.epoch/self.update_period)]),len(self.type_2_data))
-            self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/self.update_period)])*self.ratio_type_3[int(self.epoch/self.update_period)])
-            # Sampling mask 생성
-            self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
-            self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
+            self.ratio_idx = int(self.epoch/self.update_period)
+        else:
+            self.ratio_idx = 3
+        # ratio에 따라 데이터 갯수 정함
+        self.type_1_sampled_len = len(self.type_1_data)
+        self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_2[self.ratio_idx]),len(self.type_2_data))
+        self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_3[self.ratio_idx])
+        # Sampling mask 생성
+        self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
+        self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
 
-            self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
-            self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
+        self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
+        self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
 
-            self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
-            
-            self.type_1_batch_indexes = GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
-            self.type_2_batch_indexes = GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
-            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
-    
+        self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
+        
+        self.type_1_batch_indexes = GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
+        self.type_2_batch_indexes = GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
+        self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+
     def __getitem__(self, idx):
         input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
                                     self.type_2_sampled[self.type_2_batch_indexes[idx]], 
                                     self.type_3_sampled[self.type_3_batch_indexes[idx]]))
+        
         x_batch = Segments2Data(input_seg)
-        if (idx+1) % int(self.batch_num / 3) == 0 and self.gen_type == "train":
+        if (idx+1) % int(self.batch_num / 5) == 0 and self.gen_type == "train":
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
             self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
             self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
@@ -97,9 +102,10 @@ class autoencoder_generator(Sequence):
 
 # %%
 if __name__=='__main__':
-    window_size = 2
-    overlap_sliding_size = 1
+    window_size = 5
+    overlap_sliding_size = 2
     normal_sliding_size = window_size
+    sr = 128
     check = [True]
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
@@ -160,11 +166,11 @@ if __name__=='__main__':
         if os.path.exists(f"./AutoEncoder_training_{_+1}"):
             continue
         else:
-            encoder_inputs = Input(shape=(21,512,1))
+            encoder_inputs = Input(shape=(21,sr*window_size,1))
             encoder_outputs = FullChannelEncoder(inputs = encoder_inputs)
-            decoder_outputs = FullChannelDecoder(encoder_outputs)
+            decoder_outputs = FullChannelDecoder(encoder_outputs, window_size=window_size, freq=sr)
             autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
-            autoencoder_model.compile(optimizer = 'Adam', loss='mse',)
+            autoencoder_model.compile(optimizer = 'Adam', loss='mse')
             if os.path.exists(f"./AutoEncoder_training_{_}"):
                 print("Model Loaded!")
                 autoencoder_model = tf.keras.models.load_model(checkpoint_path)
