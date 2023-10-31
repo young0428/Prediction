@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import sys
 import traceback
+from scipy.signal import resample
 # 데이터 정리 
 global state_list
 state_list = ['ictal', 'preictal_late', 'preictal_early', 'preictal_ontime', 'postictal','interictal']
@@ -75,9 +76,8 @@ def Segments2Data(segments):
         labels = f.getSignalLabels()
         chn_num = len(channels)
 
-        # UpSampling을 위해 x 값 생성
-        x = np.linspace(0, 10,int((read_end-read_start)*freq[0]) )
-        x_upsample = np.linspace(0,10,int(256*(read_end-read_start)))
+        # UpSampling rate
+        target_sampling_rate = 128
 
         seg = []
         for i in range(len(interval_sets)):
@@ -88,12 +88,12 @@ def Segments2Data(segments):
                 ch_idx = labels.index(channel)
                 edf_signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*(read_end-read_start)))
                 
-                # 256 Hz이하일 경우 256Hz로 interpolation을 이용한 upsampling
-                if not freq[ch_idx] == 256:
-                    signal = np.interp(x_upsample,x, edf_signal)
+                # 128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
+                if not freq[ch_idx] == 128:
+                    signal = resample(edf_signal, int(len(edf_signal) / freq[ch_idx] * target_sampling_rate ))
                 
                 for j in range(len(interval_sets)):
-                    seg[j].append( list(signal[int(interval_sets[j][0] * 256) : int(interval_sets[j][1] * 256) ]) )
+                    seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
         
             for s in seg:    
                 signal_for_all_segments.append(s)
