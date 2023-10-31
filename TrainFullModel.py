@@ -16,6 +16,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Input, TimeDistributed
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import Sequence
+from tensorflow.keras.metrics import F1Score
 
 
 from readDataset import LoadDataset, Interval2Segments, Segments2Data
@@ -89,9 +90,7 @@ class FullModel_generator(Sequence):
         y_batch = list(map(int,y_batch))
         y_batch = np.eye(2)[y_batch]
         
-        data = Segments2Data(input_seg) # (batch, eeg_channel, data)
-        x_batch = np.split(data, 10, axis=-1) # (10, batch, eeg_channel, data)
-        x_batch = np.transpose(x_batch,(1,0,2,3))
+        x_batch = Segments2Data(input_seg) # (batch, eeg_channel, data)
 
         if (idx+1) % int(self.batch_num / 5) == 0:
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
@@ -102,9 +101,9 @@ class FullModel_generator(Sequence):
 
 # %%
 if __name__=='__main__':
-    window_size = 20
-    overlap_sliding_size = 10
-    normal_sliding_size = 20
+    window_size = 5
+    overlap_sliding_size = 2
+    normal_sliding_size = window_size
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
@@ -151,7 +150,7 @@ if __name__=='__main__':
 
     kf = KFold(n_splits=5, shuffle=True)
     epochs = 100
-    batch_size = 500   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
+    batch_size = 300   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
      # 데이터 비율 2:2:6
 
     type_1_kfold_set = kf.split(train_type_1)
@@ -190,7 +189,9 @@ if __name__=='__main__':
             ts_output = TimeDistributed(encoder_model)(fullmodel_input)
             lstm_output = LSTMLayer(ts_output)
             full_model = Model(inputs=fullmodel_input, outputs=lstm_output)
-            full_model.compile(optimizer = 'Adam',metrics=['acc'] ,loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.2))
+            full_model.compile(optimizer = 'Adam',
+                               metrics=['acc', F1Score()] ,
+                               loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.2))
 
             if os.path.exists(f"./FullModel_training_{_}"):
                 print("Model Loaded!")

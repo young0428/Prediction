@@ -59,7 +59,7 @@ class autoencoder_generator(Sequence):
         self.update_data()
         if self.gen_type == "train":
             if self.epoch % 6 == 0:
-                test_ae(int(self.epoch))
+                test_ae(int(self.epoch/2), 5,2,128)
 
     def __len__(self):
         return self.batch_num
@@ -93,7 +93,7 @@ class autoencoder_generator(Sequence):
                                     self.type_3_sampled[self.type_3_batch_indexes[idx]]))
         
         x_batch = Segments2Data(input_seg)
-        if (idx+1) % int(self.batch_num / 5) == 0 and self.gen_type == "train":
+        if (idx+1) % int(self.batch_num / 3) == 0 and self.gen_type == "train":
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
             self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
             self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
@@ -148,7 +148,7 @@ if __name__=='__main__':
 
     kf = KFold(n_splits=5, shuffle=True)
     epochs = 100
-    batch_size = 400   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
+    batch_size = 500   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
     total_len = len(train_type_1)+len(train_type_2)
     total_len = int(total_len*2.5) # 데이터 비율 2:2:6
 
@@ -219,7 +219,7 @@ if __name__=='__main__':
                     epochs = epochs,
                     validation_data = validation_generator,
                     use_multiprocessing=True,
-                    workers=6,
+                    workers=12,
                     shuffle=False,
                     callbacks= [ tboard_callback, cp_callback ]
                     )
