@@ -170,7 +170,7 @@ if __name__=='__main__':
             encoder_outputs = FullChannelEncoder(inputs = encoder_inputs)
             decoder_outputs = FullChannelDecoder(encoder_outputs, window_size=window_size, freq=sr)
             autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
-            autoencoder_model.compile(optimizer = 'Adam', loss='mse')
+            autoencoder_model.compile(optimizer = 'RMSprop', loss='mse')
             if os.path.exists(f"./AutoEncoder_training_{_}"):
                 print("Model Loaded!")
                 autoencoder_model = tf.keras.models.load_model(checkpoint_path)

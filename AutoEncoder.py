@@ -14,11 +14,15 @@ def FullChannelEncoder(inputs, window_size = 2, dilated = [1,2,4,8,16,32], freq 
 	for df in dilated:
 		x = Conv2D(filters=8, kernel_size = (1,4),padding='same',activation='relu',dilation_rate=(1,df))(inputs)	# (None, 21, 640, 8)
 		x = MaxPooling2D((1,2))(x)	# (None, 21, 320, 8)
+		x = BatchNormalization()(x)
 		x = Conv2D(filters=8, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 21, 320, 8)
 		x = MaxPooling2D((1,2))(x)	# (None, 21, 160, 8)
+		x = BatchNormalization()(x)
 		x = Conv2D(filters=8, kernel_size=(1,4),activation='relu',padding='same')(x)	# (None, 21, 160, 8)
 		x = MaxPooling2D((1,2))(x)	# (None, 21, 80, 8)
+		x = BatchNormalization()(x)
 		x = Conv2D(filters=8, kernel_size=(channel_num,1),activation='relu', padding='valid')(x)	# (None, 1, 80, 8)
+		x = BatchNormalization()(x)
 		layers_list.append(x)
 		cnt+=1
 	x = Concatenate(axis=-1)(layers_list) # (None, 1, 80, 48)
@@ -36,10 +40,13 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq
 	sum = 0
 	for i in range(len(dilated)):
 		x = Conv2DTranspose(filters=8,kernel_size=(21,1),activation='relu',padding='valid')(x_input[:,:,:,8*i:8*(i+1)])
+		x = BatchNormalization()(x)
 		x = UpSampling2D(size=(1,2))(x)
 		x = Conv2DTranspose(filters=8,kernel_size=(1,4),activation='relu',padding='same')(x)
+		x = BatchNormalization()(x)
 		x = UpSampling2D(size=(1,2))(x)
 		x = Conv2DTranspose(filters=8,kernel_size=(1,4),activation='relu',padding='same')(x)
+		x = BatchNormalization()(x)
 		x = UpSampling2D(size=(1,2))(x)
 		x = Conv2DTranspose(filters=8,kernel_size=(1,4),padding='same',activation='relu',dilation_rate=dilated[i])(x)
 		x_list.append(x)
