@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Input, Dense, Conv1D, Conv2D, LSTM, Dropout, ZeroPadding2D, SeparableConv2D, UpSampling2D, TimeDistributed, Bidirectional
+from tensorflow.keras.layers import Input, Dense, Conv1D, Conv2D, LSTM, Dropout, ZeroPadding2D, SeparableConv2D, UpSampling2D, TimeDistributed, Bidirectional, BatchNormalization
 from tensorflow.keras.layers import AveragePooling1D, Flatten, Conv1DTranspose, Conv2DTranspose, Reshape, Concatenate, AveragePooling2D, MaxPooling2D
 from tensorflow.keras.models import Model
 import tensorflow as tf
@@ -8,9 +8,9 @@ from tensorflow.keras import Sequential
 
 def LSTMLayer(inputs,cell_num = 20):
     #inputs = (batch, 80, 30)
-    x = Dropout(0.1)(inputs)
-    x = Bidirectional(LSTM(cell_num, recurrent_dropout=0.5))(x)
-    x = Dense(2)(x)
+    x = BatchNormalization()(inputs)
+    x = Bidirectional(LSTM(cell_num, dropout = 0.2, recurrent_dropout=0.2))(x)
+    x = Dense(1)(x)
 
     return x
 

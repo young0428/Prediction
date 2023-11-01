@@ -16,7 +16,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Input, TimeDistributed
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import Sequence
-from tensorflow.keras.metrics import F1Score
+from tensorflow.keras.metrics import F1Score, Recall, Precision
 
 
 from readDataset import LoadDataset, Interval2Segments, Segments2Data
@@ -58,22 +58,26 @@ class FullModel_generator(Sequence):
     def update_data(self):
         # 데이터 밸런스를 위해 데이터 밸런스 조절 및 resampling
         if self.epoch/self.update_period < 4:
-            # ratio에 따라 데이터 갯수 정함
-            self.type_1_sampled_len = len(self.type_1_data)
-            self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/self.update_period)])*self.ratio_type_2[int(self.epoch/self.update_period)]),len(self.type_2_data))
-            self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[int(self.epoch/self.update_period)])*self.ratio_type_3[int(self.epoch/self.update_period)])
-            # Sampling mask 생성
-            self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
-            self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
+            self.ratio_idx = int(self.epoch/self.update_period)
+        else:
+            self.ratio_idx = 3
+        # ratio에 따라 데이터 갯수 정함
+        self.ratio_idx = 0
+        self.type_1_sampled_len = len(self.type_1_data)
+        self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_2[self.ratio_idx]),len(self.type_2_data))
+        self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_3[self.ratio_idx])
+        # Sampling mask 생성
+        self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
+        self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
 
-            self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
-            self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
+        self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
+        self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
 
-            self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
-            
-            self.type_1_batch_indexes = GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
-            self.type_2_batch_indexes = GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
-            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+        self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
+        
+        self.type_1_batch_indexes = GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
+        self.type_2_batch_indexes = GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
+        self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
     
     def __len__(self):
         return self.batch_num
@@ -86,13 +90,9 @@ class FullModel_generator(Sequence):
                                    (np.zeros(len(self.type_2_batch_indexes[idx]))), 
                                    (np.zeros(len(self.type_3_batch_indexes[idx]))) )  )
         
-        y_batch = y_batch.tolist()
-        y_batch = list(map(int,y_batch))
-        y_batch = np.eye(2)[y_batch]
-        
         x_batch = Segments2Data(input_seg) # (batch, eeg_channel, data)
 
-        if (idx+1) % int(self.batch_num / 5) == 0:
+        if (idx+1) % int(self.batch_num / 3) == 0:
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
             self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
             self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
@@ -102,8 +102,9 @@ class FullModel_generator(Sequence):
 # %%
 if __name__=='__main__':
     window_size = 5
-    overlap_sliding_size = 2
+    overlap_sliding_size = 1
     normal_sliding_size = window_size
+    sr = 128
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
@@ -150,7 +151,7 @@ if __name__=='__main__':
 
     kf = KFold(n_splits=5, shuffle=True)
     epochs = 100
-    batch_size = 300   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
+    batch_size = 500   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
      # 데이터 비율 2:2:6
 
     type_1_kfold_set = kf.split(train_type_1)
@@ -159,21 +160,18 @@ if __name__=='__main__':
 
     autoencoder_model_path = "AutoEncoder_training_0/cp.ckpt"
 
-    encoder_inputs = Input(shape=(21,512,1))
+    encoder_inputs = Input(shape=(21,int(sr*window_size),1))
     encoder_outputs = FullChannelEncoder(inputs = encoder_inputs)
-    decoder_outputs = FullChannelDecoder(encoder_outputs)
+    decoder_outputs = FullChannelDecoder(encoder_outputs, window_size=window_size, freq=sr)
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
     autoencoder_model.load_weights(autoencoder_model_path)
 
-    encoder_input = autoencoder_model.input
     encoder_output = autoencoder_model.get_layer("tf.compat.v1.squeeze").output
-    encoder_model = Model(inputs=encoder_input, outputs=encoder_output)
+    encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
     encoder_model.trainable = False
 
-    fullmodel_input = Input(shape=(10,21,512,1))
-    ts_output = TimeDistributed(encoder_model)(fullmodel_input)
-    lstm_output = LSTMLayer(ts_output)
-    full_model = Model(inputs=fullmodel_input, outputs=lstm_output)
+    lstm_output = LSTMLayer(encoder_output)
+    full_model = Model(inputs=encoder_inputs, outputs=lstm_output)
 
     for _ in range(fold_n):
         (type_1_train_indexes, type_1_val_indexes) = next(type_1_kfold_set)
@@ -185,13 +183,13 @@ if __name__=='__main__':
         if os.path.exists(f"./FullModel_training_{_+1}"):
             continue
         else:
-            fullmodel_input = Input(shape=(10,21,512,1))
-            ts_output = TimeDistributed(encoder_model)(fullmodel_input)
-            lstm_output = LSTMLayer(ts_output)
-            full_model = Model(inputs=fullmodel_input, outputs=lstm_output)
             full_model.compile(optimizer = 'Adam',
-                               metrics=['acc', F1Score()] ,
-                               loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.2))
+                               metrics=[
+                                        tf.keras.metrics.BinaryAccuracy(threshold=0), 
+                                        tf.keras.metrics.Recall(thresholds=0), 
+                                        tf.keras.metrics.Precision(thresholds=0),
+                                        ] ,
+                               loss=tf.keras.losses.BinaryCrossentropy(from_logits=True, label_smoothing=0.1))
 
             if os.path.exists(f"./FullModel_training_{_}"):
                 print("Model Loaded!")
@@ -213,13 +211,19 @@ if __name__=='__main__':
         type_3_data_len = len(test_type_3)
         test_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
 
-        logs = "logs/lstm_512"
+        logs = "logs/lstm_20"
 
         
 
         tboard_callback = tf.keras.callbacks.TensorBoard(log_dir = logs,
                                                         histogram_freq = 1,
                                                         profile_batch = '100,200')
+        
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_prc', 
+                                                            verbose=1,
+                                                            patience=10,
+                                                            mode='max',
+                                                            restore_best_weights=True)
         
 
         # Create a callback that saves the model's weights
@@ -234,12 +238,10 @@ if __name__=='__main__':
         history = full_model.fit_generator(
                     train_generator,
                     epochs = epochs,
-                    steps_per_epoch =  train_batch_num,
                     validation_data = test_generator,
-                    validation_steps = test_batch_num,
                     use_multiprocessing=True,
-                    workers=24,
-                    callbacks= [ tboard_callback, cp_callback ]
+                    workers=16,
+                    callbacks= [ tboard_callback, cp_callback, early_stopping ]
                     )
         
         with open(f'./FullModel_training_{_}/trainHistoryDict', 'wb') as file_pi:
