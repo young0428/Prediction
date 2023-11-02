@@ -102,7 +102,7 @@ class FullModel_generator(Sequence):
 # %%
 if __name__=='__main__':
     window_size = 5
-    overlap_sliding_size = 1
+    overlap_sliding_size = 2
     normal_sliding_size = window_size
     sr = 128
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
@@ -169,6 +169,9 @@ if __name__=='__main__':
     encoder_output = autoencoder_model.get_layer("tf.compat.v1.squeeze").output
     encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
     encoder_model.trainable = False
+    encoder_layer_for_fine_tuning = ['conv2d_3','conv2d_7','conv2d_11','conv2d_15','conv2d_19','conv2d_23']
+    for layer_name_for_find_tune in encoder_layer_for_fine_tuning:
+        autoencoder_model.get_layer(layer_name_for_find_tune).trainable=True
 
     lstm_output = LSTMLayer(encoder_output)
     full_model = Model(inputs=encoder_inputs, outputs=lstm_output)
@@ -183,7 +186,7 @@ if __name__=='__main__':
         if os.path.exists(f"./FullModel_training_{_+1}"):
             continue
         else:
-            full_model.compile(optimizer = 'Adam',
+            full_model.compile(optimizer = 'RMSprop',
                                metrics=[
                                         tf.keras.metrics.BinaryAccuracy(threshold=0), 
                                         tf.keras.metrics.Recall(thresholds=0), 
@@ -219,7 +222,7 @@ if __name__=='__main__':
                                                         histogram_freq = 1,
                                                         profile_batch = '100,200')
         
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_prc', 
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_precision', 
                                                             verbose=1,
                                                             patience=10,
                                                             mode='max',
@@ -238,7 +241,7 @@ if __name__=='__main__':
         history = full_model.fit_generator(
                     train_generator,
                     epochs = epochs,
-                    validation_data = test_generator,
+                    validation_data = validation_generator,
                     use_multiprocessing=True,
                     workers=16,
                     callbacks= [ tboard_callback, cp_callback, early_stopping ]
