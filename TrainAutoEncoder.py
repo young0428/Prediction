@@ -22,7 +22,7 @@ from readDataset import LoadDataset, Interval2Segments, Segments2Data
 from AutoEncoder import FullChannelEncoder, FullChannelDecoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
-from PreProcessing import GetBatchIndexes
+import PreProcessing
 from TestAutoEncoder import test_ae
 
 gpus = tf.config.list_physical_devices('GPU')
@@ -34,7 +34,7 @@ if gpus:
 
 # %%
 class autoencoder_generator(Sequence):
-    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, gen_type):
+    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, model_name, gen_type):
     
         self.ratio_type_1 = [2,2,2,2]
         self.ratio_type_2 = [2,2,2,2]
@@ -50,6 +50,7 @@ class autoencoder_generator(Sequence):
         self.type_3_data = type_3_data
         self.test_on = False
         self.ratio_idx = 0
+        self.model_name = model_name
         self.gen_type = gen_type
 
         self.update_data()
@@ -59,7 +60,10 @@ class autoencoder_generator(Sequence):
         self.update_data()
         if self.gen_type == "train":
             if self.epoch % 6 == 0:
-                test_ae(int(self.epoch/2), 5,2,128)
+                try:
+                    test_ae(int(self.epoch/2), 5,2,128, self.model_name)
+                except:
+                    print("Fail to generate test fig")
 
     def __len__(self):
         return self.batch_num
@@ -83,9 +87,9 @@ class autoencoder_generator(Sequence):
 
         self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
         
-        self.type_1_batch_indexes = GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
-        self.type_2_batch_indexes = GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
-        self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+        self.type_1_batch_indexes = PreProcessing.GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
+        self.type_2_batch_indexes = PreProcessing.GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
+        self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
 
     def __getitem__(self, idx):
         input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
@@ -93,15 +97,17 @@ class autoencoder_generator(Sequence):
                                     self.type_3_sampled[self.type_3_batch_indexes[idx]]))
         
         x_batch = Segments2Data(input_seg)
+        y_batch = PreProcessing.FilteringSegments(x_batch)
+
         if (idx+1) % int(self.batch_num / 3) == 0 and self.gen_type == "train":
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
             self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
-            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+            self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
   
-        return x_batch, x_batch
+        return x_batch, y_batch
 
 # %%
-if __name__=='__main__':
+def train(model_name):
     window_size = 5
     overlap_sliding_size = 2
     normal_sliding_size = window_size
@@ -157,74 +163,67 @@ if __name__=='__main__':
     type_3_kfold_set = kf.split(train_type_3)
 
 
-    for _ in range(fold_n):
-        (type_1_train_indexes, type_1_val_indexes) = next(type_1_kfold_set)
-        (type_2_train_indexes, type_2_val_indexes) = next(type_2_kfold_set)
-        (type_3_train_indexes, type_3_val_indexes) = next(type_3_kfold_set)
-        checkpoint_path = f"AutoEncoder_training_{_}/cp.ckpt"
-        checkpoint_dir = os.path.dirname(checkpoint_path)
-        if os.path.exists(f"./AutoEncoder_training_{_+1}"):
-            continue
-        else:
-            encoder_inputs = Input(shape=(21,sr*window_size,1))
-            encoder_outputs = FullChannelEncoder(inputs = encoder_inputs)
-            decoder_outputs = FullChannelDecoder(encoder_outputs, window_size=window_size, freq=sr)
-            autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
-            autoencoder_model.compile(optimizer = 'RMSprop', loss='mse')
-            if os.path.exists(f"./AutoEncoder_training_{_}"):
-                print("Model Loaded!")
-                autoencoder_model = tf.keras.models.load_model(checkpoint_path)
-            
-        autoencoder_model.summary()
 
-        type_1_data_len = len(type_1_train_indexes)
-        type_2_data_len = len(type_2_train_indexes)
-        type_3_data_len = int((type_1_data_len + type_2_data_len)*1.5)
-        train_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
+    (type_1_train_indexes, type_1_val_indexes) = next(type_1_kfold_set)
+    (type_2_train_indexes, type_2_val_indexes) = next(type_2_kfold_set)
+    (type_3_train_indexes, type_3_val_indexes) = next(type_3_kfold_set)
+    checkpoint_path = f"AutoEncoder/{model_name}/cp.ckpt"
+    checkpoint_dir = os.path.dirname(checkpoint_path)
 
-        type_1_data_len = len(type_1_val_indexes)
-        type_2_data_len = len(type_2_val_indexes)
-        type_3_data_len = int((type_1_data_len + type_2_data_len)*1.5)
-        val_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
-        logs = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    encoder_inputs = Input(shape=(21,sr*window_size,1))
+    encoder_outputs = FullChannelEncoder(inputs = encoder_inputs)
+    decoder_outputs = FullChannelDecoder(encoder_outputs, window_size=window_size, freq=sr)
+    autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
+    autoencoder_model.compile(optimizer = 'RMSprop', loss='mse')
+    if os.path.exists(f"./AutoEncoder/{model_name}"):
+        print("Model Loaded!")
+        autoencoder_model = tf.keras.models.load_model(checkpoint_path)
 
-        
+    logs = "logs/" + model_name + "-" + datetime.now().strftime("%Y%m%d-%H%M%S")
 
-        tboard_callback = tf.keras.callbacks.TensorBoard(log_dir = logs,
-                                                        histogram_freq = 1,
-                                                        profile_batch = '1,400')
-        
 
-        # Create a callback that saves the model's weights
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
-                                                        save_best_only=True,
-                                                        verbose=1)
-        
-        train_generator = autoencoder_generator(train_type_1[type_1_train_indexes], 
-                                                train_type_2[type_2_train_indexes],
-                                                train_type_3[type_3_train_indexes],
-                                                batch_size,
-                                                "train"
-                                                
-                                                )
-        validation_generator = autoencoder_generator(train_type_1[type_1_val_indexes], 
-                                                     train_type_2[type_2_val_indexes],
-                                                     train_type_3[type_3_val_indexes],
-                                                     batch_size,
-                                                     "val"
-                                                     )
+    tboard_callback = tf.keras.callbacks.TensorBoard(log_dir = logs,
+                                                    histogram_freq = 1,
+                                                    profile_batch = '1,400')
+    
+
+    # Create a callback that saves the model's weights
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
+                                                    save_best_only=True,
+                                                    verbose=1)
+    
+    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', 
+                                                            verbose=1,
+                                                            patience=10,
+                                                            restore_best_weights=True)
+    
+    train_generator = autoencoder_generator(train_type_1[type_1_train_indexes], 
+                                            train_type_2[type_2_train_indexes],
+                                            train_type_3[type_3_train_indexes],
+                                            batch_size,
+                                            model_name,
+                                            "train"
+                                            
+                                            )
+    validation_generator = autoencoder_generator(train_type_1[type_1_val_indexes], 
+                                                    train_type_2[type_2_val_indexes],
+                                                    train_type_3[type_3_val_indexes],
+                                                    batch_size,
+                                                    model_name,
+                                                    "val"
+                                                    )
 # %%
-        history = autoencoder_model.fit_generator(
-                    train_generator,
-                    epochs = epochs,
-                    validation_data = validation_generator,
-                    use_multiprocessing=True,
-                    workers=12,
-                    shuffle=False,
-                    callbacks= [ tboard_callback, cp_callback ]
-                    )
-        
-        with open(f'./AutoEncoder_training_{_}/trainHistoryDict', 'wb') as file_pi:
-            pickle.dump(history.history, file_pi)
+    history = autoencoder_model.fit_generator(
+                train_generator,
+                epochs = epochs,
+                validation_data = validation_generator,
+                use_multiprocessing=True,
+                workers=12,
+                shuffle=False,
+                callbacks= [ tboard_callback, cp_callback, early_stopping ]
+                )
+    
+    with open(f'./AutoEncoder/{model_name}/trainHistoryDict', 'wb') as file_pi:
+        pickle.dump(history.history, file_pi)
 
 

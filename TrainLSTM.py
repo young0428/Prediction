@@ -23,7 +23,7 @@ from readDataset import LoadDataset, Interval2Segments, Segments2Data
 from AutoEncoder import FullChannelEncoder, FullChannelDecoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
-from PreProcessing import GetBatchIndexes
+import PreProcessing
 
 
 
@@ -75,9 +75,9 @@ class FullModel_generator(Sequence):
 
         self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
         
-        self.type_1_batch_indexes = GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
-        self.type_2_batch_indexes = GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
-        self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+        self.type_1_batch_indexes = PreProcessing.GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
+        self.type_2_batch_indexes = PreProcessing.GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
+        self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
     
     def __len__(self):
         return self.batch_num
@@ -95,12 +95,12 @@ class FullModel_generator(Sequence):
         if (idx+1) % int(self.batch_num / 3) == 0:
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
             self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
-            self.type_3_batch_indexes = GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+            self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
 
         return x_batch, y_batch
 
 # %%
-if __name__=='__main__':
+def train(model_name, encoder_model_name):
     window_size = 5
     overlap_sliding_size = 2
     normal_sliding_size = window_size
@@ -158,7 +158,7 @@ if __name__=='__main__':
     type_2_kfold_set = kf.split(train_type_2)
     type_3_kfold_set = kf.split(train_type_3)
 
-    autoencoder_model_path = "AutoEncoder_training_0/cp.ckpt"
+    autoencoder_model_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
 
     encoder_inputs = Input(shape=(21,int(sr*window_size),1))
     encoder_outputs = FullChannelEncoder(inputs = encoder_inputs)
@@ -166,88 +166,68 @@ if __name__=='__main__':
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
     autoencoder_model.load_weights(autoencoder_model_path)
 
-    encoder_output = autoencoder_model.get_layer("tf.compat.v1.squeeze").output
+    encoder_output = autoencoder_model.get_layer("tf.compat.v1.squeeze_2").output
     encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
     encoder_model.trainable = False
-    encoder_layer_for_fine_tuning = ['conv2d_3','conv2d_7','conv2d_11','conv2d_15','conv2d_19','conv2d_23']
-    for layer_name_for_find_tune in encoder_layer_for_fine_tuning:
-        autoencoder_model.get_layer(layer_name_for_find_tune).trainable=True
+
+    ## 마지막 Conv layer Find Tuning
+    # encoder_layer_for_fine_tuning = ['conv2d_3','conv2d_7','conv2d_11','conv2d_15','conv2d_19','conv2d_23']
+    # for layer_name_for_find_tune in encoder_layer_for_fine_tuning:
+    #     autoencoder_model.get_layer(layer_name_for_find_tune).trainable=True
 
     lstm_output = LSTMLayer(encoder_output)
     full_model = Model(inputs=encoder_inputs, outputs=lstm_output)
 
-    for _ in range(fold_n):
-        (type_1_train_indexes, type_1_val_indexes) = next(type_1_kfold_set)
-        (type_2_train_indexes, type_2_val_indexes) = next(type_2_kfold_set)
-        (type_3_train_indexes, type_3_val_indexes) = next(type_3_kfold_set)
-        checkpoint_path = f"FullModel_training_{_}/cp.ckpt"
-        checkpoint_dir = os.path.dirname(checkpoint_path)
+    (type_1_train_indexes, type_1_val_indexes) = next(type_1_kfold_set)
+    (type_2_train_indexes, type_2_val_indexes) = next(type_2_kfold_set)
+    (type_3_train_indexes, type_3_val_indexes) = next(type_3_kfold_set)
+    checkpoint_path = f"LSTM/{model_name}/cp.ckpt"
+    checkpoint_dir = os.path.dirname(checkpoint_path)
+
+    full_model.compile(optimizer = 'RMSprop',
+                        metrics=[
+                                tf.keras.metrics.BinaryAccuracy(threshold=0), 
+                                tf.keras.metrics.Recall(thresholds=0), 
+                                tf.keras.metrics.Precision(thresholds=0),
+                                ] ,
+                        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True, label_smoothing=0.1))
+
+    if os.path.exists(f"./LSTM/{model_name}"):
+        print("Model Loaded!")
+        full_model = tf.keras.models.load_model(checkpoint_path)
+
+    logs = f"logs/{model_name}"    
+
+    tboard_callback = tf.keras.callbacks.TensorBoard(log_dir = logs,
+                                                    histogram_freq = 1,
+                                                    profile_batch = '100,200')
     
-        if os.path.exists(f"./FullModel_training_{_+1}"):
-            continue
-        else:
-            full_model.compile(optimizer = 'RMSprop',
-                               metrics=[
-                                        tf.keras.metrics.BinaryAccuracy(threshold=0), 
-                                        tf.keras.metrics.Recall(thresholds=0), 
-                                        tf.keras.metrics.Precision(thresholds=0),
-                                        ] ,
-                               loss=tf.keras.losses.BinaryCrossentropy(from_logits=True, label_smoothing=0.1))
+    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_precision', 
+                                                        verbose=1,
+                                                        patience=10,
+                                                        mode='max',
+                                                        restore_best_weights=True)
+    
 
-            if os.path.exists(f"./FullModel_training_{_}"):
-                print("Model Loaded!")
-                full_model = tf.keras.models.load_model(checkpoint_path)
-        full_model.summary()
-
-        type_1_data_len = len(type_1_train_indexes)
-        type_2_data_len = len(type_2_train_indexes)
-        type_3_data_len = int((type_1_data_len + type_2_data_len)*1.5)
-        train_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
-
-        type_1_data_len = len(type_1_val_indexes)
-        type_2_data_len = len(type_2_val_indexes)
-        type_3_data_len = int((type_1_data_len + type_2_data_len)*1.5)
-        val_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
-
-        type_1_data_len = len(test_type_1)
-        type_2_data_len = len(test_type_2)
-        type_3_data_len = len(test_type_3)
-        test_batch_num = int((type_1_data_len + type_2_data_len + type_3_data_len)/batch_size)
-
-        logs = "logs/lstm_20"
-
-        
-
-        tboard_callback = tf.keras.callbacks.TensorBoard(log_dir = logs,
-                                                        histogram_freq = 1,
-                                                        profile_batch = '100,200')
-        
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_precision', 
-                                                            verbose=1,
-                                                            patience=10,
-                                                            mode='max',
-                                                            restore_best_weights=True)
-        
-
-        # Create a callback that saves the model's weights
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
-                                                        save_best_only=True,
-                                                        verbose=1)
-        
-        train_generator = FullModel_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size)
-        validation_generator = FullModel_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size)
-        test_generator = FullModel_generator(test_type_1, test_type_2, test_type_3, batch_size)
+    # Create a callback that saves the model's weights
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
+                                                    save_best_only=True,
+                                                    verbose=1)
+    
+    train_generator = FullModel_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size)
+    validation_generator = FullModel_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size)
+    test_generator = FullModel_generator(test_type_1, test_type_2, test_type_3, batch_size)
 # %%
-        history = full_model.fit_generator(
-                    train_generator,
-                    epochs = epochs,
-                    validation_data = validation_generator,
-                    use_multiprocessing=True,
-                    workers=16,
-                    callbacks= [ tboard_callback, cp_callback, early_stopping ]
-                    )
-        
-        with open(f'./FullModel_training_{_}/trainHistoryDict', 'wb') as file_pi:
-            pickle.dump(history.history, file_pi)
+    history = full_model.fit_generator(
+                train_generator,
+                epochs = epochs,
+                validation_data = test_generator,
+                use_multiprocessing=True,
+                workers=16,
+                callbacks= [ tboard_callback, cp_callback, early_stopping ]
+                )
+    
+    with open(f'./LSTM/{model_name}/trainHistoryDict', 'wb') as file_pi:
+        pickle.dump(history.history, file_pi)
 
 

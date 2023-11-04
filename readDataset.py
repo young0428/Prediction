@@ -44,10 +44,6 @@ def Segments2Data(segments):
     f = None
     cnt = 0
     for idx, segment in enumerate(segments):
-        if (idx+1) % (int(len(segments)/20)) == 0 :
-            pass
-            #cnt+=1
-            #print(f"Data Loading {idx+1} / {len(segments)} ({cnt*5}%)... ")
         if not name == segment[0]:
             name = segment[0]
             if not f == None:
@@ -104,10 +100,8 @@ def Segments2Data(segments):
             print(labels)
             print("Read start : %d  Read end : %d"%(read_start,read_end))
             print("minus : %d sample num : %d"%(read_end-read_start, (read_end-read_start)*freq[ch_idx]))
-            print(f'shape of x : {np.shape(x)}')
             print(f'shape of edf_signal : {np.shape(edf_signal)}')
             print(f'shape of signal     : {np.shape(signal)}')
-            print(f'shape_of_upsample   : {np.shape(x_upsample)}')
             print(f'shape of seg        : {np.shape(seg[j])}')
             print(f'file duration       : {f.getFileDuration()}')
             print(f'filename : {name}')

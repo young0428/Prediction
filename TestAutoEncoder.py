@@ -18,10 +18,10 @@ from readDataset import LoadDataset, Interval2Segments, Segments2Data
 from AutoEncoder import FullChannelEncoder, FullChannelDecoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
-from PreProcessing import GetBatchIndexes
+import PreProcessing
 
 
-def test_ae(epoch,win_size,sliding,freq):
+def test_ae(epoch,win_size,sliding,freq,encoder_model_name):
     window_size = win_size
     overlap_sliding_size = sliding
     sr = freq
@@ -56,7 +56,7 @@ def test_ae(epoch,win_size,sliding,freq):
     test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] + test_segments_set['preictal_late'])
     test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
 
-    checkpoint_path = "AutoEncoder_training_0/cp.ckpt"
+    checkpoint_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     autoencoder_model = tf.keras.models.load_model(checkpoint_path)
@@ -70,48 +70,68 @@ def test_ae(epoch,win_size,sliding,freq):
 
     autoencoder_model = Model(inputs=encoder_input, outputs=autoencoder_model.output)
 
-    input_type_1 = test_type_1[np.random.choice(len(test_type_1), 100, replace=False)]
-    input_type_2 = test_type_2[np.random.choice(len(test_type_2), 100, replace=False)]
-    input_type_3 = test_type_3[np.random.choice(len(test_type_3), 100, replace=False)]
+    input_type_1 = test_type_1[np.random.choice(len(test_type_1), 1, replace=False)]
+    input_type_2 = test_type_2[np.random.choice(len(test_type_2), 1, replace=False)]
+    input_type_3 = test_type_3[np.random.choice(len(test_type_3), 1, replace=False)]
 
-    X_seg = np.concatenate((input_type_1,input_type_2,input_type_3))
-    X_data = Segments2Data(X_seg)
+    x_seg = np.concatenate((input_type_1,input_type_2,input_type_3))
+    x_data = Segments2Data(x_seg)
+    filtered_origin_data = PreProcessing.FilteringSegments(x_data)
 
-    original_data = X_data
-    reconstructed_output = autoencoder_model.predict(X_data)
+    original_data = x_data
+    reconstructed_output = autoencoder_model.predict(x_data)
 
     original_data = np.squeeze(original_data)
     reconstructed_output = np.squeeze(reconstructed_output)
+    filtered_origin_data = np.squeeze(filtered_origin_data)
 
-    plt.figure(figsize=(20,20))
+
+    plt.figure(figsize=(48,27))
     
-    plt.subplot(2,2,1)
-    rand_idx = random.randrange(0,100)
-    plt.plot(original_data[rand_idx][3],'b')
-    plt.plot(reconstructed_output[rand_idx][3],'r')
-    plt.legend(labels=["Input", "Recontructed"])
+    plt.subplot(2,3,1)
+    plt.plot(original_data[0][0],'b')
+    plt.plot(reconstructed_output[0][0],'r')
+    plt.plot(filtered_origin_data[0][0],'g')
+    plt.legend(labels=["Origin", "Recontructed", "filtered"])
 
-    plt.subplot(2,2,2)
-    rand_idx = random.randrange(0,100)
-    plt.plot(original_data[rand_idx][3],'b')
-    plt.plot(reconstructed_output[rand_idx][3],'r')
-    plt.legend(labels=["Input", "Recontructed"])
+    plt.subplot(2,3,2)
+    plt.plot(original_data[1][0],'b')
+    plt.plot(reconstructed_output[1][0],'r')
+    plt.plot(filtered_origin_data[1][0],'g')
+    plt.legend(labels=["Origin", "Recontructed", "filtered"])
 
-    plt.subplot(2,2,3)
-    rand_idx = random.randrange(100,200)
-    plt.plot(original_data[rand_idx][3],'b')
-    plt.plot(reconstructed_output[rand_idx][3],'r')
-    plt.legend(labels=["Input", "Recontructed"])
+    plt.subplot(2,3,3)
+    plt.plot(original_data[2][0],'b')
+    plt.plot(reconstructed_output[2][0],'r')
+    plt.plot(filtered_origin_data[2][0],'g')
+    plt.legend(labels=["Origin", "Recontructed", "filtered"])
 
-    plt.subplot(2,2,4)
-    rand_idx = random.randrange(200,300)
-    plt.plot(original_data[rand_idx][3],'b')
-    plt.plot(reconstructed_output[rand_idx][3],'r')
-    plt.legend(labels=["Input", "Recontructed"])
+    freq = np.fft.fftfreq(len(original_data[0][0]),1/sr)
+
+    plt.subplot(2,3,4)
+    plt.plot(freq,PreProcessing.AbsFFT(original_data[0][0]),'b')
+    plt.plot(freq,PreProcessing.AbsFFT(reconstructed_output[0][0]),'r')
+    plt.plot(freq,PreProcessing.AbsFFT(filtered_origin_data[0][0]),'g')
+    plt.legend(labels=["Origin", "Recontructed", "filtered"])
+
+    plt.subplot(2,3,5)
+    plt.plot(freq,PreProcessing.AbsFFT(original_data[1][0]),'b')
+    plt.plot(freq,PreProcessing.AbsFFT(reconstructed_output[1][0]),'r')
+    plt.plot(freq,PreProcessing.AbsFFT(filtered_origin_data[1][0]),'g')
+    plt.legend(labels=["Origin", "Recontructed", "filtered"])
+
+    plt.subplot(2,3,6)
+    plt.plot(freq, PreProcessing.AbsFFT(original_data[2][0]),'b')
+    plt.plot(freq,PreProcessing.AbsFFT(reconstructed_output[2][0]),'r')
+    plt.plot(freq,PreProcessing.AbsFFT(filtered_origin_data[2][0]),'g')
+    plt.legend(labels=["Origin", "Recontructed", "filtered"])
 
 
     #plt.show()
     plt.savefig(f"./ae_test/testfig_{epoch}.png")
+
+
+#test_ae(3, 5,2,128, "0.1_50_BandPass")
 
 
 
