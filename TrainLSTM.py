@@ -78,6 +78,8 @@ class FullModel_generator(Sequence):
         self.type_1_batch_indexes = PreProcessing.GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
         self.type_2_batch_indexes = PreProcessing.GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
         self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+        
+        self.iden_mat = np.eye(3)
     
     def __len__(self):
         return self.batch_num
@@ -86,9 +88,14 @@ class FullModel_generator(Sequence):
         input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
                                     self.type_2_sampled[self.type_2_batch_indexes[idx]], 
                                     self.type_3_sampled[self.type_3_batch_indexes[idx]]))
-        y_batch = np.concatenate( ( np.ones(len(self.type_1_batch_indexes[idx])), 
-                                   (np.zeros(len(self.type_2_batch_indexes[idx]))), 
-                                   (np.zeros(len(self.type_3_batch_indexes[idx]))) )  )
+        
+        y_categorical = np.concatenate( ( np.ones(len(self.type_1_batch_indexes[idx]))*0, 
+                                   (np.ones(len(self.type_2_batch_indexes[idx])))*1, 
+                                   (np.ones(len(self.type_3_batch_indexes[idx])))*2))
+        y_categorical = np.asarray(y_categorical, dtype='int16')
+        y_batch = self.iden_mat[y_categorical]
+        
+        
         
         x_batch = Segments2Data(input_seg) # (batch, eeg_channel, data)
         #x_batch = PreProcessing.FilteringSegments(x_batch)
@@ -153,7 +160,6 @@ def train(model_name, encoder_model_name):
     epochs = 100
     batch_size = 500   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
      # 데이터 비율 2:2:6
-
     type_1_kfold_set = kf.split(train_type_1)
     type_2_kfold_set = kf.split(train_type_2)
     type_3_kfold_set = kf.split(train_type_3)
@@ -190,7 +196,7 @@ def train(model_name, encoder_model_name):
                                 tf.keras.metrics.Recall(), 
                                 tf.keras.metrics.Precision(),
                                 ] ,
-                        loss=tf.keras.losses.BinaryCrossentropy(label_smoothing=0.1))
+                        loss=tf.keras.losses.categorical_crossentropy(label_smoothing=0.05))
 
     if os.path.exists(f"./LSTM/{model_name}"):
         print("Model Loaded!")
@@ -207,6 +213,11 @@ def train(model_name, encoder_model_name):
                                                         patience=10,
                                                         mode='max',
                                                         restore_best_weights=True)
+    backup_callback = tf.keras.callbacks.BackupAndRestore(
+      "./LSTM/training_backup",
+      save_freq="epoch",
+      delete_checkpoint=True,
+    )
     
 
     # Create a callback that saves the model's weights
@@ -224,7 +235,7 @@ def train(model_name, encoder_model_name):
                 validation_data = test_generator,
                 use_multiprocessing=True,
                 workers=16,
-                callbacks= [ tboard_callback, cp_callback, early_stopping ]
+                callbacks= [ tboard_callback, cp_callback, early_stopping, backup_callback ]
                 )
     
     with open(f'./LSTM/{model_name}/trainHistoryDict', 'wb') as file_pi:

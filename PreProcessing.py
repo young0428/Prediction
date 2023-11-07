@@ -4,7 +4,7 @@ import operator
 import scipy
 def GetBatchIndexes(data_len, batch_num):
     batch_size = data_len / batch_num
-    mul = batch_size
+    mul = 50
     #idx_list = list(range(data_len))
     batch_seg_size = batch_size / mul
     idx_list = [ list(range(int(i*batch_seg_size), int((i+1)*batch_seg_size))) for i in range(int(batch_num*mul)) ]

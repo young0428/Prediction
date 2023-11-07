@@ -200,6 +200,12 @@ def train(model_name):
                                                             patience=10,
                                                             restore_best_weights=True)
     
+    backup_callback = tf.keras.callbacks.BackupAndRestore(
+      "./AutoEncoder/training_backup",
+      save_freq="epoch",
+      delete_checkpoint=True,
+    )
+    
     train_generator = autoencoder_generator(train_type_1[type_1_train_indexes], 
                                             train_type_2[type_2_train_indexes],
                                             train_type_3[type_3_train_indexes],
@@ -223,7 +229,7 @@ def train(model_name):
                 use_multiprocessing=True,
                 workers=12,
                 shuffle=False,
-                callbacks= [ tboard_callback, cp_callback, early_stopping ]
+                callbacks= [ tboard_callback, cp_callback, early_stopping, backup_callback ]
                 )
     
     with open(f'./AutoEncoder/{model_name}/trainHistoryDict', 'wb') as file_pi:
