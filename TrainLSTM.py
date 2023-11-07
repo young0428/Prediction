@@ -88,17 +88,16 @@ class FullModel_generator(Sequence):
         input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
                                     self.type_2_sampled[self.type_2_batch_indexes[idx]], 
                                     self.type_3_sampled[self.type_3_batch_indexes[idx]]))
+        x_batch = Segments2Data(input_seg) # (batch, eeg_channel, data)
+        x_batch = PreProcessing.FilteringSegments(x_batch)
         
         y_categorical = np.concatenate( ( np.ones(len(self.type_1_batch_indexes[idx]))*0, 
                                    (np.ones(len(self.type_2_batch_indexes[idx])))*1, 
                                    (np.ones(len(self.type_3_batch_indexes[idx])))*2))
         y_categorical = np.asarray(y_categorical, dtype='int16')
         y_batch = self.iden_mat[y_categorical]
+
         
-        
-        
-        x_batch = Segments2Data(input_seg) # (batch, eeg_channel, data)
-        #x_batch = PreProcessing.FilteringSegments(x_batch)
         if (idx+1) % int(self.batch_num / 3) == 0:
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
             self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
@@ -146,12 +145,20 @@ def train(model_name, encoder_model_name):
 
     # AutoEncoder 단계에서는 1:1:3
 
-    train_type_1 = np.array(train_segments_set['preictal_ontime'])
-    train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] + train_segments_set['preictal_late'])
+    # train_type_1 = np.array(train_segments_set['preictal_ontime'])
+    # train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] + train_segments_set['preictal_late'])
+    # train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
+
+    # test_type_1 = np.array(test_segments_set['preictal_ontime'])
+    # test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] + test_segments_set['preictal_late'])
+    # test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
+
+    train_type_1 = np.array(train_segments_set['preictal_ontime'] + train_segments_set['preictal_late'])
+    train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] )
     train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
 
-    test_type_1 = np.array(test_segments_set['preictal_ontime'])
-    test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] + test_segments_set['preictal_late'])
+    test_type_1 = np.array(test_segments_set['preictal_ontime'] + test_segments_set['preictal_late'])
+    test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] )
     test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
 
     fold_n = 5
@@ -192,7 +199,7 @@ def train(model_name, encoder_model_name):
 
     full_model.compile(optimizer = 'RMSprop',
                         metrics=[
-                                tf.keras.metrics.BinaryAccuracy(), 
+                                tf.keras.metrics.CategoricalAccuracy(), 
                                 tf.keras.metrics.Recall(), 
                                 tf.keras.metrics.Precision(),
                                 ] ,

@@ -98,7 +98,7 @@ class autoencoder_generator(Sequence):
         
         x_batch = Segments2Data(input_seg)
         #x_batch = PreProcessing.AbsFFT(x_batch)
-        #y_batch = PreProcessing.FilteringSegments(x_batch)
+        x_batch = PreProcessing.FilteringSegments(x_batch)
 
         if (idx+1) % int(self.batch_num / 3) == 0 and self.gen_type == "train":
             self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
@@ -147,8 +147,12 @@ def train(model_name):
 
     # AutoEncoder 단계에서는 1:1:3
 
-    train_type_1 = np.array(train_segments_set['preictal_ontime'])
-    train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] + train_segments_set['preictal_late'])
+    # train_type_1 = np.array(train_segments_set['preictal_ontime'])
+    # train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] + train_segments_set['preictal_late'])
+    # train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
+
+    train_type_1 = np.array(train_segments_set['preictal_ontime'] + train_segments_set['preictal_late'])
+    train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] )
     train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
 
     fold_n = 5
@@ -227,7 +231,7 @@ def train(model_name):
                 epochs = epochs,
                 validation_data = validation_generator,
                 use_multiprocessing=True,
-                workers=12,
+                workers=8,
                 shuffle=False,
                 callbacks= [ tboard_callback, cp_callback, early_stopping, backup_callback ]
                 )

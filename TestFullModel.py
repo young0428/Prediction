@@ -18,6 +18,7 @@ from readDataset import LoadDataset, Interval2Segments, Segments2Data
 from AutoEncoder import FullChannelEncoder, FullChannelDecoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
+from scipy.signal import resample
 import PreProcessing
 
 import pyedflib
@@ -31,6 +32,9 @@ class ValidatonTestData :
         self.edf_file_path = edf_file_path
         self.interval_sets = self.IntervalSorting(interval_sets)
         self.which_data = which_data
+        self.full_signal = []
+        self.target_sr = 128
+        self.duration = 0
 
 
     def IntervalSorting(self, interval_sets):
@@ -44,26 +48,36 @@ class ValidatonTestData :
         temp = sorted(temp, key=itemgetter(0,1))
         return temp
     
-    def LoadFileDataset(self, patient_name):
-        SNU_channels = ['Fp1-AVG', 'F3-AVG', 'C3-AVG', 'P3-AVG', 'Fp2-AVG', 'F4-AVG', 'C4-AVG', 
+    def LoadFileData(self, patient_name):
+        channels_for_type = {
+        'SNU': ['Fp1-AVG', 'F3-AVG', 'C3-AVG', 'P3-AVG', 'Fp2-AVG', 'F4-AVG', 'C4-AVG', 
                         'P4-AVG', 'F7-AVG', 'T1-AVG', 'T3-AVG', 'T5-AVG', 'O1-AVG', 'F8-AVG', 
-                        'T2-AVG', 'T4-AVG', 'T6-AVG', 'O2-AVG', 'Fz-AVG', 'Cz-AVG', 'Pz-AVG']
-        CHB_channels = ['FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3',
+                        'T2-AVG', 'T4-AVG', 'T6-AVG', 'O2-AVG', 'Fz-AVG', 'Cz-AVG', 'Pz-AVG'],
+        'CHB': ['FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3',
                         'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4',
                         'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
                         'P8-O2', 'FZ-CZ', 'CZ-PZ']
+        }
         file_path = self.GetFilePath(patient_name)
         with pyedflib.EdfReader(file_path) as f:
             labels = f.getSignalLabels()
-            for channel in SNU_channels:
+            freq = f.getSampleFrequencies()
+            self.duration = f.getFileDuration()
+            self.full_signal = np.array([])
+            for channel in channels_for_type[self.which_data]:
                 ch_idx = labels.index(channel)
-                one_channel_signal = f.readSignal(ch_idx)
-            
+                edf_signal = f.readSignal(ch_idx)
+                np.append(self.full_signal, (resample(edf_signal, int(len(edf_signal) / freq[ch_idx] * self.target_sr ))), axis=0)
+
+    def MakeSegments(self):
+        # segment = [start, duration]
+
+
     
     def GetFilePath(self, patient_name):
         return self.edf_file_path+'/'+(patient_name.split('_'))[0]+'/'+patient_name+'.edf'
 
-
+#%%
 if __name__=='__main__':
     window_size = 5
     overlap_sliding_size = 1
