@@ -59,16 +59,16 @@ def FullChannelEncoder_paper_base(inputs):
 
 	#inputs = (None, 21, 640, 1)
 	x = Conv2D(filters=32, kernel_size = (2,1),padding='valid')(inputs)	# (None, 20, 640, 32)
-	x = LeakyReLU(x)
+	x = LeakyReLU()(x)
 	x = BatchNormalization()(x)
 	x = MaxPooling2D((2,2))(x)	# (None, 10, 320, 32)
 	
 	x = Conv2D(filters=32, kernel_size=(2,3),padding='same')(x)	# (None, 10, 320, 32)
-	x = LeakyReLU(x)
+	x = LeakyReLU()(x)
 	x = MaxPooling2D((2,2))(x)	# (None, 5, 160, 32)
 	
 	x = Conv2D(filters=32, kernel_size=(2,3),padding='valid')(x)	# (None, 4, 158, 32)
-	x = LeakyReLU(x)
+	x = LeakyReLU()(x)
 	x = MaxPooling2D((2,2))(x)	# (None, 2, 79, 32)
 	
 	x = Conv2D(filters=32, kernel_size=(2,3), padding='valid')(x)	# (None, 1, 77, 32)
