@@ -76,55 +76,36 @@ def test_ae(epoch,win_size,sliding,freq,encoder_model_name):
 
     x_seg = np.concatenate((input_type_1,input_type_2,input_type_3))
     x_data = Segments2Data(x_seg)
-    filtered_origin_data = PreProcessing.FilteringSegments(x_data)
-
-    original_data = x_data
+    x_data = PreProcessing.FilteringSegments(x_data)
+    #x_data_fft = PreProcessing.AbsFFT(x_data)
     reconstructed_output = autoencoder_model.predict(x_data)
+    #filtered_origin_data = PreProcessing.FilteringSegments(x_data)
 
+    #original_data = x_data_fft
+    original_data = x_data
+   
     original_data = np.squeeze(original_data)
     reconstructed_output = np.squeeze(reconstructed_output)
-    filtered_origin_data = np.squeeze(filtered_origin_data)
 
 
     plt.figure(figsize=(48,27))
     
-    plt.subplot(2,3,1)
+    plt.subplot(3,1,1)
     plt.plot(original_data[0][0],'b')
     plt.plot(reconstructed_output[0][0],'r')
-    plt.plot(filtered_origin_data[0][0],'g')
-    plt.legend(labels=["Origin", "Recontructed", "filtered"])
+    plt.legend(labels=["Origin", "Recontructed"])
 
-    plt.subplot(2,3,2)
-    plt.plot(original_data[1][0],'b')
-    plt.plot(reconstructed_output[1][0],'r')
-    plt.plot(filtered_origin_data[1][0],'g')
-    plt.legend(labels=["Origin", "Recontructed", "filtered"])
+    plt.subplot(3,1,2)
+    plt.plot( original_data[1][0],'b')
+    plt.plot( reconstructed_output[1][0],'r')
+    plt.legend(labels=["Origin", "Recontructed"])
 
-    plt.subplot(2,3,3)
+    plt.subplot(3,1,3)
     plt.plot(original_data[2][0],'b')
-    plt.plot(reconstructed_output[2][0],'r')
-    plt.plot(filtered_origin_data[2][0],'g')
-    plt.legend(labels=["Origin", "Recontructed", "filtered"])
+    plt.plot( reconstructed_output[2][0],'r')
+    plt.legend(labels=["Origin", "Recontructed"])
 
-    freq = np.fft.fftfreq(len(original_data[0][0]),1/sr)
-
-    plt.subplot(2,3,4)
-    plt.plot(freq,PreProcessing.AbsFFT(original_data[0][0]),'b')
-    plt.plot(freq,PreProcessing.AbsFFT(reconstructed_output[0][0]),'r')
-    plt.plot(freq,PreProcessing.AbsFFT(filtered_origin_data[0][0]),'g')
-    plt.legend(labels=["Origin", "Recontructed", "filtered"])
-
-    plt.subplot(2,3,5)
-    plt.plot(freq,PreProcessing.AbsFFT(original_data[1][0]),'b')
-    plt.plot(freq,PreProcessing.AbsFFT(reconstructed_output[1][0]),'r')
-    plt.plot(freq,PreProcessing.AbsFFT(filtered_origin_data[1][0]),'g')
-    plt.legend(labels=["Origin", "Recontructed", "filtered"])
-
-    plt.subplot(2,3,6)
-    plt.plot(freq, PreProcessing.AbsFFT(original_data[2][0]),'b')
-    plt.plot(freq,PreProcessing.AbsFFT(reconstructed_output[2][0]),'r')
-    plt.plot(freq,PreProcessing.AbsFFT(filtered_origin_data[2][0]),'g')
-    plt.legend(labels=["Origin", "Recontructed", "filtered"])
+    #freq = np.fft.fftfreq(len(original_data[0][0]),1/sr)
 
 
     #plt.show()

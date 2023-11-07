@@ -27,10 +27,7 @@ def FullChannelEncoder(inputs, window_size = 2, dilated = [1,2,4,8,16,32], freq 
 		cnt+=1
 	x = Concatenate(axis=-1)(layers_list) # (None, 1, 80, 48)
 	x=  tf.squeeze(x, axis = -3) # (None, 80, 48)
-
-
 	return x
-
 
 
 def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq = 256, window_size = 2):
@@ -57,6 +54,53 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq
 	decoder_output = Conv2DTranspose(filters=1, kernel_size=(1,4),padding='same')(x)
 
 	return decoder_output
+
+def FullChannelEncoder_paper_base(inputs):
+
+	#inputs = (None, 21, 640, 1)
+	x = Conv2D(filters=32, kernel_size = (2,1),padding='valid')(inputs)	# (None, 20, 640, 32)
+	x = ReLU()(x)
+	x = BatchNormalization()(x)
+	x = MaxPooling2D((2,2))(x)	# (None, 10, 320, 32)
+	
+	x = Conv2D(filters=32, kernel_size=(2,3),padding='same')(x)	# (None, 10, 320, 32)
+	x = ReLU()(x)
+	x = MaxPooling2D((2,2))(x)	# (None, 5, 160, 32)
+	
+	x = Conv2D(filters=32, kernel_size=(2,3),padding='valid')(x)	# (None, 4, 158, 32)
+	x = ReLU()(x)
+	x = MaxPooling2D((2,2))(x)	# (None, 2, 79, 32)
+	
+	x = Conv2D(filters=32, kernel_size=(2,3), padding='valid')(x)	# (None, 1, 77, 32)
+	x=  tf.squeeze(x, axis = -3) # (None, 77, 32)
+
+
+	return x
+
+def FullChannelDecoder_paper_base(inputs):
+	# (None, 77, 32)
+	x_input = Reshape((1,inputs.shape[1],inputs.shape[2]))(inputs)
+	
+	x = Conv2DTranspose(filters=32,kernel_size=(2,3), padding='valid')(x_input)# (None, 2, 79, 32)
+	x = UpSampling2D(size=(2,2))(x)	
+	x = ReLU()(x)															# (None, 4, 158, 32)
+	
+
+	x = Conv2DTranspose(filters=32,kernel_size=(2,3),padding='valid')(x)		# (None, 5, 160, 32)
+	x = UpSampling2D(size=(2,2))(x)																# (None, 10, 320, 32)
+	x = ReLU()(x)
+	
+	x = Conv2DTranspose(filters=32,kernel_size=(2,3),padding='same')(x)		# (None, 10, 320, 32)
+	x = UpSampling2D(size=(2,2))(x)																# (None, 20, 640, 32
+	x = BatchNormalization()(x)
+	x = ReLU()(x)
+	
+	x = Conv2DTranspose(filters=1,kernel_size=(2,1),padding='valid')(x) # (None, 21, 640, 1)
+	decoder_output = tf.squeeze(x, axis = -1)
+
+	return decoder_output
+
+
 
 
 

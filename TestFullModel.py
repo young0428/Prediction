@@ -11,19 +11,63 @@ import tensorflow as tf
 from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import Sequence
+from operator import itemgetter, attrgetter
 
 
 from readDataset import LoadDataset, Interval2Segments, Segments2Data
 from AutoEncoder import FullChannelEncoder, FullChannelDecoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
-from PreProcessing import GetBatchIndexes
+import PreProcessing
+
+import pyedflib
+
+
+class ValidatonTestData :
+    def __init__(self, interval_sets, window_size, model, info_file_path, edf_file_path, which_data):
+        self.window_size = window_size
+        self.model = model
+        self.info_file_path = info_file_path
+        self.edf_file_path = edf_file_path
+        self.interval_sets = self.IntervalSorting(interval_sets)
+        self.which_data = which_data
+
+
+    def IntervalSorting(self, interval_sets):
+        state_list = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
+        state_dict = {'preictal_ontime':1, 'ictal':0, 'preictal_late':0, 'preictal_early':0, 'postictal':0,'interictal':0}
+        temp = []
+        for state in state_list:
+            for interval in interval_sets[state]:
+                temp += [(interval + [state_dict[state]])]
+        
+        temp = sorted(temp, key=itemgetter(0,1))
+        return temp
+    
+    def LoadFileDataset(self, patient_name):
+        SNU_channels = ['Fp1-AVG', 'F3-AVG', 'C3-AVG', 'P3-AVG', 'Fp2-AVG', 'F4-AVG', 'C4-AVG', 
+                        'P4-AVG', 'F7-AVG', 'T1-AVG', 'T3-AVG', 'T5-AVG', 'O1-AVG', 'F8-AVG', 
+                        'T2-AVG', 'T4-AVG', 'T6-AVG', 'O2-AVG', 'Fz-AVG', 'Cz-AVG', 'Pz-AVG']
+        CHB_channels = ['FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3',
+                        'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4',
+                        'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
+                        'P8-O2', 'FZ-CZ', 'CZ-PZ']
+        file_path = self.GetFilePath(patient_name)
+        with pyedflib.EdfReader(file_path) as f:
+            labels = f.getSignalLabels()
+            for channel in SNU_channels:
+                ch_idx = labels.index(channel)
+                one_channel_signal = f.readSignal(ch_idx)
+            
+    
+    def GetFilePath(self, patient_name):
+        return self.edf_file_path+'/'+(patient_name.split('_'))[0]+'/'+patient_name+'.edf'
 
 
 if __name__=='__main__':
-    window_size = 20
+    window_size = 5
     overlap_sliding_size = 1
-    normal_sliding_size = 5
+    normal_sliding_size = 1
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
@@ -39,11 +83,11 @@ if __name__=='__main__':
 
     # 상대적으로 데이터 갯수가 적은 것들은 window_size 2초에 sliding_size 1초로 overlap 시켜 데이터 증강
     for state in ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early']:
-        test_segments_set[state] = Interval2Segments(test_interval_set[state],edf_file_path, window_size, overlap_sliding_size)
+        test_segments_set[state] = Interval2Segments(test_interval_set[state], edf_file_path, window_size, overlap_sliding_size)
         
 
     for state in ['postictal', 'interictal']:
-        test_segments_set[state] = Interval2Segments(test_interval_set[state],edf_file_path, window_size, normal_sliding_size)
+        test_segments_set[state] = Interval2Segments(test_interval_set[state], edf_file_path, window_size, normal_sliding_size)
 
     # type 1은 True Label데이터 preictal_ontime
     # type 2는 특별히 갯수 맞춰줘야 하는 데이터
@@ -66,54 +110,18 @@ if __name__=='__main__':
     X_seg = np.concatenate((input_type_1,input_type_2,input_type_3))
     y_batch = np.concatenate( ( np.ones(len(input_type_1)), (np.zeros(len(input_type_2))), (np.zeros(len(input_type_3))) )  )
     y_batch = y_batch.tolist()
-    y_batch = list(map(int,y_batch))
-    y_batch = np.eye(2)[y_batch]
 
-    X_data = Segments2Data(X_seg)
-    x_batch = np.split(X_data, 10, axis=-1) # (10, batch, eeg_channel, data)
+    x_data = Segments2Data(X_seg)
+    x_data = PreProcessing.FilteringSegments(x_data)
+    x_batch = np.split(x_data, 10, axis=-1) # (10, batch, eeg_channel, data)
     x_batch = np.transpose(x_batch,(1,0,2,3))
 
-    original_data = X_data
-    #predict_y = fullmodel.predict(x_batch)
-    #predict_y = tf.round(predict_y)
-
+    original_data = x_data
     y_predict = fullmodel.predict(x_batch)
-    print(y_predict)
-    print(y_batch)
 
 
-
-    # original_data = np.squeeze(original_data)
-    # reconstructed_output = np.squeeze(reconstructed_output)
-
-    # plt.figure(figsize=(20,20))
     
-    # plt.subplot(2,2,1)
-    # rand_idx = random.randrange(0,100)
-    # plt.plot(original_data[rand_idx][3],'b')
-    # plt.plot(reconstructed_output[rand_idx][3],'r')
-    # plt.legend(labels=["Input", "Recontructed"])
 
-    # plt.subplot(2,2,2)
-    # rand_idx = random.randrange(0,100)
-    # plt.plot(original_data[rand_idx][3],'b')
-    # plt.plot(reconstructed_output[rand_idx][3],'r')
-    # plt.legend(labels=["Input", "Recontructed"])
-
-    # plt.subplot(2,2,3)
-    # rand_idx = random.randrange(100,200)
-    # plt.plot(original_data[rand_idx][3],'b')
-    # plt.plot(reconstructed_output[rand_idx][3],'r')
-    # plt.legend(labels=["Input", "Recontructed"])
-
-    # plt.subplot(2,2,4)
-    # rand_idx = random.randrange(200,300)
-    # plt.plot(original_data[rand_idx][3],'b')
-    # plt.plot(reconstructed_output[rand_idx][3],'r')
-    # plt.legend(labels=["Input", "Recontructed"])
-
-
-    # plt.savefig("testfig.png")
 
 
 

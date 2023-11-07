@@ -10,7 +10,7 @@ def LSTMLayer(inputs,cell_num = 20):
     #inputs = (batch, 80, 30)
     x = Bidirectional(LSTM(cell_num, dropout = 0.2, recurrent_dropout=0.2))(inputs)
     x = Dense(256, activation='relu')(x)
-    x = Dense(1)(x)
+    x = Dense(3, activation = 'softmax')(x)
 
     return x
 
