@@ -35,6 +35,7 @@ class ValidatonTestData :
         self.full_signal = []
         self.target_sr = 128
         self.duration = 0
+        self.alarm_interval = 10
 
 
     def IntervalSorting(self, interval_sets):
@@ -49,6 +50,7 @@ class ValidatonTestData :
         return temp
     
     def LoadFileData(self, patient_name):
+        # 환자 이름에 해당하는 EDF 파일을 self.full_signal 변수에 데이터 넣음
         channels_for_type = {
         'SNU': ['Fp1-AVG', 'F3-AVG', 'C3-AVG', 'P3-AVG', 'Fp2-AVG', 'F4-AVG', 'C4-AVG', 
                         'P4-AVG', 'F7-AVG', 'T1-AVG', 'T3-AVG', 'T5-AVG', 'O1-AVG', 'F8-AVG', 

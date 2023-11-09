@@ -153,12 +153,12 @@ def train(model_name, encoder_model_name):
     # test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] + test_segments_set['preictal_late'])
     # test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
 
-    train_type_1 = np.array(train_segments_set['preictal_ontime'] + train_segments_set['preictal_late'])
-    train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] )
+    train_type_1 = np.array(train_segments_set['preictal_ontime'] + train_segments_set['preictal_late'] + train_segments_set['preictal_early'] )
+    train_type_2 = np.array(train_segments_set['ictal']  )
     train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
 
-    test_type_1 = np.array(test_segments_set['preictal_ontime'] + test_segments_set['preictal_late'])
-    test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] )
+    test_type_1 = np.array(test_segments_set['preictal_ontime'] + test_segments_set['preictal_late'] + test_segments_set['preictal_early'] )
+    test_type_2 = np.array(test_segments_set['ictal'])
     test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
 
     fold_n = 5
@@ -179,7 +179,7 @@ def train(model_name, encoder_model_name):
     autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
     autoencoder_model.load_weights(autoencoder_model_path)
 
-    encoder_output = autoencoder_model.get_layer("tf.compat.v1.squeeze").output
+    encoder_output = autoencoder_model.get_layer("encoder_last").output
     encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
     encoder_model.trainable = False
 
@@ -203,7 +203,7 @@ def train(model_name, encoder_model_name):
                                 tf.keras.metrics.Recall(), 
                                 tf.keras.metrics.Precision(),
                                 ] ,
-                        loss=tf.keras.losses.categorical_crossentropy(label_smoothing=0.05))
+                        loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.05) )
 
     if os.path.exists(f"./LSTM/{model_name}"):
         print("Model Loaded!")
@@ -217,7 +217,7 @@ def train(model_name, encoder_model_name):
     
     early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_recall', 
                                                         verbose=1,
-                                                        patience=10,
+                                                        patience=20,
                                                         mode='max',
                                                         restore_best_weights=True)
     backup_callback = tf.keras.callbacks.BackupAndRestore(

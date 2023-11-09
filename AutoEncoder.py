@@ -72,7 +72,7 @@ def FullChannelEncoder_paper_base(inputs):
 	x = MaxPooling2D((2,2))(x)	# (None, 2, 79, 32)
 	
 	x = Conv2D(filters=32, kernel_size=(2,3), padding='valid')(x)	# (None, 1, 77, 32)
-	x=  tf.squeeze(x, axis = -3) # (None, 77, 32)
+	x=  tf.squeeze(x, axis = -3, name="encoder_last") # (None, 77, 32)
 
 
 	return x
