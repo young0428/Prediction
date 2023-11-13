@@ -58,12 +58,12 @@ def FullChannelDecoder(inputs, dilated = [1,2,4,8,16,32], pooling_rate = 8, freq
 def FullChannelEncoder_paper_base(inputs):
 
 	#inputs = (None, 21, 640, 1)
-	x = Conv2D(filters=32, kernel_size = (2,1),padding='valid')(inputs)	# (None, 20, 640, 32)
+	x = Conv2D(filters=8, kernel_size = (2,1),padding='valid')(inputs)	# (None, 20, 640, 32)
 	x = LeakyReLU()(x)
-	x = BatchNormalization()(x)
+	#x = BatchNormalization()(x)
 	x = MaxPooling2D((2,2))(x)	# (None, 10, 320, 32)
 	
-	x = Conv2D(filters=32, kernel_size=(2,3),padding='same')(x)	# (None, 10, 320, 32)
+	x = Conv2D(filters=16, kernel_size=(2,3),padding='same')(x)	# (None, 10, 320, 32)
 	x = LeakyReLU()(x)
 	x = MaxPooling2D((2,2))(x)	# (None, 5, 160, 32)
 	
@@ -71,7 +71,7 @@ def FullChannelEncoder_paper_base(inputs):
 	x = LeakyReLU()(x)
 	x = MaxPooling2D((2,2))(x)	# (None, 2, 79, 32)
 	
-	x = Conv2D(filters=32, kernel_size=(2,3), padding='valid')(x)	# (None, 1, 77, 32)
+	x = Conv2D(filters=64, kernel_size=(2,3), padding='valid')(x)	# (None, 1, 77, 32)
 	x=  tf.squeeze(x, axis = -3, name="encoder_last") # (None, 77, 32)
 
 
@@ -86,13 +86,13 @@ def FullChannelDecoder_paper_base(inputs):
 	x = LeakyReLU()(x)															# (None, 4, 158, 32)
 	
 
-	x = Conv2DTranspose(filters=32,kernel_size=(2,3),padding='valid')(x)		# (None, 5, 160, 32)
+	x = Conv2DTranspose(filters=16,kernel_size=(2,3),padding='valid')(x)		# (None, 5, 160, 32)
 	x = UpSampling2D(size=(2,2))(x)																# (None, 10, 320, 32)
 	x = LeakyReLU()(x)
-	
-	x = Conv2DTranspose(filters=32,kernel_size=(2,3),padding='same')(x)		# (None, 10, 320, 32)
+
+	x = Conv2DTranspose(filters=8,kernel_size=(2,3),padding='same')(x)		# (None, 10, 320, 32)
 	x = UpSampling2D(size=(2,2))(x)																# (None, 20, 640, 32
-	x = BatchNormalization()(x)
+	#x = BatchNormalization()(x)
 	x = LeakyReLU()(x)
 	
 	x = Conv2DTranspose(filters=1,kernel_size=(2,1),padding='valid')(x) # (None, 21, 640, 1)

@@ -52,7 +52,7 @@ class ValidatonTestData :
             self.MakeSegments(self.patient_dict[patient])
             batch_idx_seq = self.GetBatchIndexes()
             for idx, batch_idx in enumerate(batch_idx_seq):
-                val_object.Segments2Data(val_object.segments[batch_idx])
+                val_object.Segments2Data(self.segments[batch_idx], self.labels[batch_idx])
                 val_object.Predict()
                 val_object.PostProcessing()
                 val_object.Result2Mat()
@@ -124,6 +124,7 @@ class ValidatonTestData :
                 self.labels.append(interval[3])
                 time += self.sliding_size 
         self.segments = np.array(self.segments)
+        self.labels = np.array(self.labels)
     # 전체 segments를 batch_size로 나눔 
     def GetBatchIndexes(self):
         lst = list(range(len(self.segments)))
@@ -144,7 +145,7 @@ class ValidatonTestData :
             for j in range(self.k):
                 s = start_idx + j * sliding_num
                 self.batch_x.append(self.full_signal[:,s:s+sample_num])
-                self.true.append(self.labels[seg_idx])
+                self.true.append(labels[seg_idx])
 
     def Predict(self):
         self.batch_x = np.expand_dims(self.batch_x,axis=-1)
@@ -196,102 +197,103 @@ class ValidatonTestData :
         return self.edf_file_path+'/'+(patient_name.split('_'))[0]+'/'+patient_name+'.edf'
 
 #%%
-#def validation(lstm_model_name):
-window_size = 5
-overlap_sliding_size = 1
-normal_sliding_size = 1
-test_batch_size = 100
+def validation(lstm_model_name):
+    window_size = 5
+    overlap_sliding_size = 1
+    normal_sliding_size = 1
+    test_batch_size = 100
 
-state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
+    state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
-# for WSL
-lstm_model_name = "paper_base_rawEEG_categorical"
-test_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_test.csv"
-edf_file_path = "/host/d/SNU_DATA"
+    # for WSL
+    #lstm_model_name = "paper_base_rawEEG_categorical"
+    test_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_test.csv"
+    edf_file_path = "/host/d/SNU_DATA"
 
-# # for window
-# test_info_file_path = "D:/SNU_DATA/SNU_patient_info_test.csv"
-# edf_file_path = "D:/SNU_DATA"
+    # # for window
+    # test_info_file_path = "D:/SNU_DATA/SNU_patient_info_test.csv"
+    # edf_file_path = "D:/SNU_DATA"
 
-checkpoint_path = f"LSTM/{lstm_model_name}/cp.ckpt"
-checkpoint_dir = os.path.dirname(checkpoint_path)
+    checkpoint_path = f"LSTM/{lstm_model_name}/cp.ckpt"
+    checkpoint_dir = os.path.dirname(checkpoint_path)
 
-fullmodel = tf.keras.models.load_model(checkpoint_path)
+    fullmodel = tf.keras.models.load_model(checkpoint_path)
 
-test_interval_set = LoadDataset(test_info_file_path)
-val_object = ValidatonTestData(test_interval_set, 5, fullmodel, test_batch_size, test_info_file_path, edf_file_path, 'SNU')
-# %%
-# val_object.start()
-sorted_intervals = val_object.IntervalSorting(val_object.interval_sets) # [환자명, start, end, state_label]
-print(sorted_intervals[0:5])
-patient_name_list = val_object.GetPatientName(sorted_intervals)
-print(patient_name_list[0:5])
-val_object.SetKN(5,3)
-#%%
+    test_interval_set = LoadDataset(test_info_file_path)
+    val_object = ValidatonTestData(test_interval_set, 5, fullmodel, test_batch_size, test_info_file_path, edf_file_path, 'SNU')
+    # %%
+    val_object.start()
+    sens,far = val_object.Calc()
+    return val_object.matrix, val_object.tf_matrix, sens, far
+# sorted_intervals = val_object.IntervalSorting(val_object.interval_sets) # [환자명, start, end, state_label]
+# print(sorted_intervals[0:5])
+# patient_name_list = val_object.GetPatientName(sorted_intervals)
+# print(patient_name_list[0:5])
+# val_object.SetKN(5,3)
+# #%%
 
-val_object.LoadFileData(patient_name_list[0])
-print(f'signal shape : {np.shape(val_object.full_signal)}')
-#%%
-val_object.MakeSegments(val_object.patient_dict[patient_name_list[0]])
-print(f'segment shape : {np.shape(val_object.segments)}')
-#%%   
-batch_idx_seq = val_object.GetBatchIndexes()
+# val_object.LoadFileData(patient_name_list[0])
+# print(f'signal shape : {np.shape(val_object.full_signal)}')
+# #%%
+# val_object.MakeSegments(val_object.patient_dict[patient_name_list[0]])
+# print(f'segment shape : {np.shape(val_object.segments)}')
+# #%%   
+# batch_idx_seq = val_object.GetBatchIndexes()
+# val_object.labels = np.array(val_object.labels)
+# for idx, batch_idx in enumerate(batch_idx_seq):
+#     val_object.Segments2Data(val_object.segments[batch_idx], val_object.labels[batch_idx])
+#     val_object.Predict()
+#     val_object.PostProcessing()
+#     val_object.Result2Mat()
+#     sens, far = val_object.Calc()
+#     print(f'\rTest Progress {"%.2f"%((idx+1)/len(batch_idx_seq)*100)}% ({idx+1}/{len(batch_idx_seq)})   Sensitivity : {"%.2f"%(sens*100)}    FAR : {"%.4f"%(far)}', end='')
+#     #print(f'batch_x shape : {np.shape(val_object.batch_x)}')
+#     #print(f'true    shape : {np.shape(val_object.true)}')
+#     #print(f'Predict : {val_object.predict[0:25]}')
 
-for idx, batch_idx in enumerate(batch_idx_seq):
-    val_object.Segments2Data(val_object.segments[batch_idx])
+# #%%
 
-    val_object.Predict()
-    val_object.PostProcessing()
-    val_object.Result2Mat()
-    sens, far = val_object.Calc()
-    print(f'\rTest Progress {"%.2f"%((idx+1)/len(batch_idx_seq)*100)}% ({idx+1}/{len(batch_idx_seq)})   Sensitivity : {"%.2f"%(sens*100)}    FAR : {"%.4f"%(far)}', end='')
-    #print(f'batch_x shape : {np.shape(val_object.batch_x)}')
-    #print(f'true    shape : {np.shape(val_object.true)}')
-    #print(f'Predict : {val_object.predict[0:25]}')
+# #val_object.start()
 
-#%%
+# #validation("paper_base_rawEEG_categorical")
 
-#val_object.start()
-
-#validation("paper_base_rawEEG_categorical")
-
-    # # 상대적으로 데이터 갯수가 적은 것들은 window_size 2초에 sliding_size 1초로 overlap 시켜 데이터 증강
-    # for state in ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early']:
-    #     test_segments_set[state] = Interval2Segments(test_interval_set[state], edf_file_path, window_size, overlap_sliding_size)
+#     # # 상대적으로 데이터 갯수가 적은 것들은 window_size 2초에 sliding_size 1초로 overlap 시켜 데이터 증강
+#     # for state in ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early']:
+#     #     test_segments_set[state] = Interval2Segments(test_interval_set[state], edf_file_path, window_size, overlap_sliding_size)
         
 
-    # for state in ['postictal', 'interictal']:
-    #     test_segments_set[state] = Interval2Segments(test_interval_set[state], edf_file_path, window_size, normal_sliding_size)
+#     # for state in ['postictal', 'interictal']:
+#     #     test_segments_set[state] = Interval2Segments(test_interval_set[state], edf_file_path, window_size, normal_sliding_size)
 
-    # # type 1은 True Label데이터 preictal_ontime
-    # # type 2는 특별히 갯수 맞춰줘야 하는 데이터
-    # # type 3는 나머지
+#     # # type 1은 True Label데이터 preictal_ontime
+#     # # type 2는 특별히 갯수 맞춰줘야 하는 데이터
+#     # # type 3는 나머지
 
 
-    # test_type_1 = np.array(test_segments_set['preictal_ontime'])
-    # test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] + test_segments_set['preictal_late'])
-    # test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
+#     # test_type_1 = np.array(test_segments_set['preictal_ontime'])
+#     # test_type_2 = np.array(test_segments_set['ictal'] + test_segments_set['preictal_early'] + test_segments_set['preictal_late'])
+#     # test_type_3 = np.array(test_segments_set['postictal'] + test_segments_set['interictal'])
 
-    # checkpoint_path = "FullModel_training_0/cp.ckpt"
-    # checkpoint_dir = os.path.dirname(checkpoint_path)
+#     # checkpoint_path = "FullModel_training_0/cp.ckpt"
+#     # checkpoint_dir = os.path.dirname(checkpoint_path)
 
-    # fullmodel = tf.keras.models.load_model(checkpoint_path)
+#     # fullmodel = tf.keras.models.load_model(checkpoint_path)
 
-    # input_type_1 = test_type_1[np.random.choice(len(test_type_1), 100, replace=False)]
-    # input_type_2 = test_type_2[np.random.choice(len(test_type_2), 100, replace=False)]
-    # input_type_3 = test_type_3[np.random.choice(len(test_type_3), 100, replace=False)]
+#     # input_type_1 = test_type_1[np.random.choice(len(test_type_1), 100, replace=False)]
+#     # input_type_2 = test_type_2[np.random.choice(len(test_type_2), 100, replace=False)]
+#     # input_type_3 = test_type_3[np.random.choice(len(test_type_3), 100, replace=False)]
 
-    # X_seg = np.concatenate((input_type_1,input_type_2,input_type_3))
-    # y_batch = np.concatenate( ( np.ones(len(input_type_1)), (np.zeros(len(input_type_2))), (np.zeros(len(input_type_3))) )  )
-    # y_batch = y_batch.tolist()
+#     # X_seg = np.concatenate((input_type_1,input_type_2,input_type_3))
+#     # y_batch = np.concatenate( ( np.ones(len(input_type_1)), (np.zeros(len(input_type_2))), (np.zeros(len(input_type_3))) )  )
+#     # y_batch = y_batch.tolist()
 
-    # x_data = Segments2Data(X_seg)
-    # x_data = PreProcessing.FilteringSegments(x_data)
-    # x_batch = np.split(x_data, 10, axis=-1) # (10, batch, eeg_channel, data)
-    # x_batch = np.transpose(x_batch,(1,0,2,3))
+#     # x_data = Segments2Data(X_seg)
+#     # x_data = PreProcessing.FilteringSegments(x_data)
+#     # x_batch = np.split(x_data, 10, axis=-1) # (10, batch, eeg_channel, data)
+#     # x_batch = np.transpose(x_batch,(1,0,2,3))
 
-    # original_data = x_data
-    # y_predict = fullmodel.predict(x_batch)
+#     # original_data = x_data
+#     # y_predict = fullmodel.predict(x_batch)
 
 
     

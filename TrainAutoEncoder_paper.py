@@ -207,7 +207,7 @@ def train(model_name):
                                                             restore_best_weights=True)
     
     backup_callback = tf.keras.callbacks.BackupAndRestore(
-      "./AutoEncoder/training_backup",
+      f"./AutoEncoder/{model_name}/training_backup",
       save_freq="epoch",
       delete_checkpoint=True,
     )

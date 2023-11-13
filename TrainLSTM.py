@@ -200,8 +200,6 @@ def train(model_name, encoder_model_name):
     full_model.compile(optimizer = 'RMSprop',
                         metrics=[
                                 tf.keras.metrics.CategoricalAccuracy(), 
-                                tf.keras.metrics.Recall(), 
-                                tf.keras.metrics.Precision(),
                                 ] ,
                         loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.05) )
 
@@ -221,7 +219,7 @@ def train(model_name, encoder_model_name):
                                                         mode='max',
                                                         restore_best_weights=True)
     backup_callback = tf.keras.callbacks.BackupAndRestore(
-      "./LSTM/training_backup",
+      f"./LSTM/{model_name}/training_backup",
       save_freq="epoch",
       delete_checkpoint=True,
     )
