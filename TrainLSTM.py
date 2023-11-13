@@ -39,8 +39,8 @@ class FullModel_generator(Sequence):
     def __init__(self,type_1_data, type_2_data, type_3_data, batch_size):
         
         self.ratio_type_1 = [5,4,3,2]
-        self.ratio_type_2 = [3,3,3,2]
-        self.ratio_type_3 = [2,3,4,6]
+        self.ratio_type_2 = [1,1,1,1]
+        self.ratio_type_3 = [5,3,4,6]
         self.batch_size = batch_size
         self.epoch = 0
         self.update_period = 20
@@ -199,7 +199,8 @@ def train(model_name, encoder_model_name):
 
     full_model.compile(optimizer = 'RMSprop',
                         metrics=[
-                                tf.keras.metrics.CategoricalAccuracy(), 
+                                tf.keras.metrics.CategoricalAccuracy(),
+                                tf.keras.metrics.Recall(class_id=0)
                                 ] ,
                         loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.05) )
 
