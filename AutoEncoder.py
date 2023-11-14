@@ -81,21 +81,68 @@ def FullChannelDecoder_paper_base(inputs):
 	# (None, 77, 32)
 	x_input = Reshape((1,inputs.shape[1],inputs.shape[2]))(inputs)
 	
-	x = Conv2DTranspose(filters=32,kernel_size=(2,3), padding='valid')(x_input)# (None, 2, 79, 32)
+	x = Conv2DTranspose(filters=64,kernel_size=(2,3), padding='valid')(x_input)# (None, 2, 79, 32)
 	x = UpSampling2D(size=(2,2))(x)	
 	x = LeakyReLU()(x)															# (None, 4, 158, 32)
 	
 
-	x = Conv2DTranspose(filters=16,kernel_size=(2,3),padding='valid')(x)		# (None, 5, 160, 32)
-	x = UpSampling2D(size=(2,2))(x)																# (None, 10, 320, 32)
+	x = Conv2DTranspose(filters=32,kernel_size=(2,3),padding='valid')(x)		# (None, 5, 160, 32)
+	x = UpSampling2D(size=(2,2))(x)												# (None, 10, 320, 32)
 	x = LeakyReLU()(x)
 
-	x = Conv2DTranspose(filters=8,kernel_size=(2,3),padding='same')(x)		# (None, 10, 320, 32)
-	x = UpSampling2D(size=(2,2))(x)																# (None, 20, 640, 32
+	x = Conv2DTranspose(filters=16,kernel_size=(2,3),padding='same')(x)		# (None, 10, 320, 32)
+	x = UpSampling2D(size=(2,2))(x)											# (None, 20, 640, 32)
 	#x = BatchNormalization()(x)
 	x = LeakyReLU()(x)
 	
 	x = Conv2DTranspose(filters=1,kernel_size=(2,1),padding='valid')(x) # (None, 21, 640, 1)
+
+	decoder_output = tf.squeeze(x, axis = -1)
+
+	return decoder_output
+
+
+def FullChannelEncoder_for_CHB(inputs):
+
+	#inputs = (None, , 18, 640, 1)
+	x = Conv2D(filters=32, kernel_size = (2,3),padding='same')(inputs)	# (None, 18, 640, 32)
+	x = LeakyReLU()(x)
+	#x = BatchNormalization()(x)
+	x = MaxPooling2D((2,2))(x)	# (None, 9, 320, 32)
+	
+	x = Conv2D(filters=64, kernel_size=(2,3),padding='valid')(x)	# (None, 8, 318, 64)
+	x = LeakyReLU()(x)
+	x = MaxPooling2D((2,2))(x)	# (None, 4, 159, 64)
+	
+	x = Conv2D(filters=128, kernel_size=(1,2),padding='valid')(x)	# (None, 4, 158, 128)
+	x = LeakyReLU()(x)
+	x = MaxPooling2D((2,2))(x)	# (None, 2, 79, 32)
+	
+	x = Conv2D(filters=64, kernel_size=(2,3), padding='valid')(x)	# (None, 1, 77, 64)
+	x=  tf.squeeze(x, axis = -3, name="encoder_last") # (None, 77, 64)
+
+
+	return x
+
+def FullChannelDecoder_for_CHB(inputs):
+	# (None, 77, 64)
+	x = Reshape((1,inputs.shape[1],inputs.shape[2]))(inputs)
+	
+	x = Conv2DTranspose(filters=64,kernel_size=(2,3), padding='valid')(x)# (None, 2, 79, 64)
+	x = UpSampling2D(size=(2,2))(x)										# (None, 4, 158, 128)
+	x = LeakyReLU()(x)															
+	
+
+	x = Conv2DTranspose(filters=128,kernel_size=(1,2),padding='valid')(x)		# (None, 4, 159, 128)
+	x = UpSampling2D(size=(2,2))(x)												# (None, 8, 318, 128)
+	x = LeakyReLU()(x)
+
+	x = Conv2DTranspose(filters=64,kernel_size=(2,3),padding='valid')(x)		# (None, 9, 320, 64)
+	x = UpSampling2D(size=(2,2))(x)												# (None, 18,640, 32)
+	#x = BatchNormalization()(x)
+	x = LeakyReLU()(x)
+	
+	x = Conv2DTranspose(filters=1,kernel_size=(2,3),padding='same')(x) # (None, 18, 640, 1)
 	decoder_output = tf.squeeze(x, axis = -1)
 
 	return decoder_output

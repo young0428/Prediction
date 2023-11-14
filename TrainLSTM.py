@@ -1,8 +1,7 @@
 # %%
 import os
 
-os.environ['TF_GPU_THREAD_MODE']='gpu_private'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 
 from datetime import datetime
 import sys
@@ -34,9 +33,12 @@ if gpus:
   except RuntimeError as e:
     print(e)
 
+os.environ['TF_GPU_THREAD_MODE']='gpu_private'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 # %%
 class FullModel_generator(Sequence):
-    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size):
+    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, data_type = 'snu'):
         
         self.ratio_type_1 = [5,4,3,2]
         self.ratio_type_2 = [1,1,1,1]
@@ -47,6 +49,7 @@ class FullModel_generator(Sequence):
         self.type_1_data = type_1_data
         self.type_2_data = type_2_data
         self.type_3_data = type_3_data
+        self.data_type = data_type
 
 
         self.update_data()
@@ -75,9 +78,9 @@ class FullModel_generator(Sequence):
 
         self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
         
-        self.type_1_batch_indexes = PreProcessing.GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
-        self.type_2_batch_indexes = PreProcessing.GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
-        self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+        self.type_1_batch_indexes = PreProcessing.GetBatchIndexes(self.type_1_sampled_len, self.batch_num, 0)
+        self.type_2_batch_indexes = PreProcessing.GetBatchIndexes(self.type_2_sampled_len, self.batch_num, 0)
+        self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num, 0)
         
         self.iden_mat = np.eye(3)
     
@@ -88,25 +91,23 @@ class FullModel_generator(Sequence):
         input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
                                     self.type_2_sampled[self.type_2_batch_indexes[idx]], 
                                     self.type_3_sampled[self.type_3_batch_indexes[idx]]))
-        x_batch = Segments2Data(input_seg) # (batch, eeg_channel, data)
+        x_batch = Segments2Data(input_seg, self.data_type) # (batch, eeg_channel, data)
         x_batch = PreProcessing.FilteringSegments(x_batch)
-        
         y_categorical = np.concatenate( ( np.ones(len(self.type_1_batch_indexes[idx]))*0, 
                                    (np.ones(len(self.type_2_batch_indexes[idx])))*1, 
                                    (np.ones(len(self.type_3_batch_indexes[idx])))*2))
         y_categorical = np.asarray(y_categorical, dtype='int16')
         y_batch = self.iden_mat[y_categorical]
 
-        
-        if (idx+1) % int(self.batch_num / 3) == 0:
-            self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
-            self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
-            self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
-
         return x_batch, y_batch
+    
+def get_first_name_like_layer(model,name):
+    for layer in model.layers:
+        if name in layer.name:
+            return layer
 
 # %%
-def train(model_name, encoder_model_name):
+def train(model_name, encoder_model_name, data_type = 'snu'):
     window_size = 5
     overlap_sliding_size = 2
     normal_sliding_size = window_size
@@ -114,9 +115,51 @@ def train(model_name, encoder_model_name):
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
-    train_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_train.csv"
-    test_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_test.csv"
-    edf_file_path = "/host/d/SNU_DATA"
+    autoencoder_model_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
+    if data_type=='snu':
+        train_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_train.csv"
+        test_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_test.csv"
+        edf_file_path = "/host/d/SNU_DATA"
+
+        checkpoint_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
+        checkpoint_dir = os.path.dirname(checkpoint_path)
+        if not os.path.exists(checkpoint_dir):
+            os.mkdir(checkpoint_dir)
+
+            
+        encoder_inputs = Input(shape=(21,int(sr*window_size),1))
+        encoder_outputs = AutoEncoder.FullChannelEncoder_paper_base(inputs = encoder_inputs)
+        decoder_outputs = AutoEncoder.FullChannelDecoder_paper_base(encoder_outputs)
+        autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
+        autoencoder_model.load_weights(autoencoder_model_path)
+
+        encoder_output_layer = get_first_name_like_layer(autoencoder_model, 'squeeze')
+        encoder_output = encoder_output_layer.output
+        encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
+        encoder_model.trainable = False
+
+    
+
+    else:
+        train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
+        test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
+        edf_file_path = "/host/d/CHB"
+
+        checkpoint_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
+        checkpoint_dir = os.path.dirname(checkpoint_path)
+        if not os.path.exists(checkpoint_dir):
+            os.mkdir(checkpoint_dir)
+
+            
+        encoder_inputs = Input(shape=(18,int(sr*window_size),1))
+        encoder_outputs = AutoEncoder.FullChannelEncoder_for_CHB(inputs = encoder_inputs)
+        decoder_outputs = AutoEncoder.FullChannelDecoder_for_CHB(encoder_outputs)
+        autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
+        autoencoder_model.load_weights(autoencoder_model_path)
+
+        encoder_output = autoencoder_model.get_layer("encoder_last").output
+        encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
+        encoder_model.trainable = False
 
     # #for window
     # train_info_file_path = "D:/SNU_DATA/SNU_patient_info_train.csv"
@@ -165,23 +208,13 @@ def train(model_name, encoder_model_name):
 
     kf = KFold(n_splits=5, shuffle=True)
     epochs = 100
-    batch_size = 500   # 한번의 gradient update시마다 들어가는 데이터의 사이즈
+    batch_size = 1000 # 한번의 gradient update시마다 들어가는 데이터의 사이즈
      # 데이터 비율 2:2:6
     type_1_kfold_set = kf.split(train_type_1)
     type_2_kfold_set = kf.split(train_type_2)
     type_3_kfold_set = kf.split(train_type_3)
 
-    autoencoder_model_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
-
-    encoder_inputs = Input(shape=(21,int(sr*window_size),1))
-    encoder_outputs = AutoEncoder.FullChannelEncoder_paper_base(inputs = encoder_inputs)
-    decoder_outputs = AutoEncoder.FullChannelDecoder_paper_base(encoder_outputs)
-    autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
-    autoencoder_model.load_weights(autoencoder_model_path)
-
-    encoder_output = autoencoder_model.get_layer("encoder_last").output
-    encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
-    encoder_model.trainable = False
+    
 
     ## 마지막 Conv layer Find Tuning
     # encoder_layer_for_fine_tuning = ['conv2d_3','conv2d_7','conv2d_11','conv2d_15','conv2d_19','conv2d_23']
@@ -197,6 +230,9 @@ def train(model_name, encoder_model_name):
     checkpoint_path = f"LSTM/{model_name}/cp.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
+    if not os.path.exists(checkpoint_dir):
+        os.mkdir(checkpoint_dir)
+
     full_model.compile(optimizer = 'RMSprop',
                         metrics=[
                                 tf.keras.metrics.CategoricalAccuracy(),
@@ -204,7 +240,7 @@ def train(model_name, encoder_model_name):
                                 ] ,
                         loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.05) )
 
-    if os.path.exists(f"./LSTM/{model_name}"):
+    if os.path.exists(checkpoint_path):
         print("Model Loaded!")
         full_model = tf.keras.models.load_model(checkpoint_path)
 
@@ -229,16 +265,16 @@ def train(model_name, encoder_model_name):
     # Create a callback that saves the model's weights
     cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
                                                     save_best_only=True,
-                                                    verbose=1)
+                                                    verbose=0)
     
-    train_generator = FullModel_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size)
-    validation_generator = FullModel_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size)
-    test_generator = FullModel_generator(test_type_1, test_type_2, test_type_3, batch_size)
+    train_generator = FullModel_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size,data_type)
+    validation_generator = FullModel_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size,data_type)
+    test_generator = FullModel_generator(test_type_1, test_type_2, test_type_3, batch_size,data_type)
 # %%
     history = full_model.fit_generator(
                 train_generator,
                 epochs = epochs,
-                validation_data = test_generator,
+                validation_data = validation_generator,
                 use_multiprocessing=True,
                 workers=16,
                 callbacks= [ tboard_callback, cp_callback, early_stopping, backup_callback ]

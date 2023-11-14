@@ -2,9 +2,12 @@ import numpy as np
 import random
 import operator
 import scipy
-def GetBatchIndexes(data_len, batch_num):
+def GetBatchIndexes(data_len, batch_num, mult=20):
     batch_size = data_len / batch_num
-    mul = 50
+    if mult == 0:
+        mul = batch_size
+    else:
+        mul = mult
     #idx_list = list(range(data_len))
     batch_seg_size = batch_size / mul
     idx_list = [ list(range(int(i*batch_seg_size), int((i+1)*batch_seg_size))) for i in range(int(batch_num*mul)) ]

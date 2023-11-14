@@ -34,7 +34,7 @@ if gpus:
 
 # %%
 class autoencoder_generator(Sequence):
-    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, model_name, gen_type, data_type):
+    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, model_name, gen_type):
     
         self.ratio_type_1 = [2,2,2,2]
         self.ratio_type_2 = [2,2,2,2]
@@ -52,7 +52,6 @@ class autoencoder_generator(Sequence):
         self.ratio_idx = 0
         self.model_name = model_name
         self.gen_type = gen_type
-        self.data_type = data_type
 
         self.update_data()
 
@@ -62,7 +61,7 @@ class autoencoder_generator(Sequence):
         if self.gen_type == "train":
             if self.epoch % 6 == 0:
                 try:
-                    test_ae(int(self.epoch/2), 5,2,128, self.model_name)
+                    test_ae(int(self.epoch/2), 5, 2, 128, self.model_name)
                 except:
                     print("Fail to generate test fig")
 
@@ -97,7 +96,8 @@ class autoencoder_generator(Sequence):
                                     self.type_2_sampled[self.type_2_batch_indexes[idx]], 
                                     self.type_3_sampled[self.type_3_batch_indexes[idx]]))
         
-        x_batch = Segments2Data(input_seg, self.data_type)
+        x_batch = Segments2Data(input_seg,'chb')
+        #x_batch = PreProcessing.AbsFFT(x_batch)
         x_batch = PreProcessing.FilteringSegments(x_batch)
 
         # if (idx+1) % int(self.batch_num / 3) == 0 and self.gen_type == "train":
@@ -108,57 +108,18 @@ class autoencoder_generator(Sequence):
         return x_batch, x_batch
 
 # %%
-def train(model_name, type='snu'):
+def train(model_name):
     window_size = 5
     overlap_sliding_size = 2
     normal_sliding_size = window_size
+    ch_num = 18
     sr = 128
-    check = [True]
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
-    if type=='snu':
-        train_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_train.csv"
-        test_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_test.csv"
-        edf_file_path = "/host/d/SNU_DATA"
-
-        checkpoint_path = f"AutoEncoder/{model_name}/cp.ckpt"
-        checkpoint_dir = os.path.dirname(checkpoint_path)
-        if not os.path.exists(checkpoint_dir):
-            os.mkdir(checkpoint_dir)
-
-            
-        encoder_inputs = Input(shape=(21,sr*window_size,1))
-        encoder_outputs = AutoEncoder.FullChannelEncoder_paper_base(inputs = encoder_inputs)
-        decoder_outputs = AutoEncoder.FullChannelDecoder_paper_base(encoder_outputs)
-        autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
-        autoencoder_model.compile(optimizer = 'RMSprop', loss='mse')
-        if os.path.exists(checkpoint_path):
-            print("Model Loaded!")
-            autoencoder_model = tf.keras.models.load_model(checkpoint_path)
-
-    else:
-        train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
-        test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
-        edf_file_path = "/host/d/CHB"
-
-        checkpoint_path = f"AutoEncoder/{model_name}/cp.ckpt"
-        checkpoint_dir = os.path.dirname(checkpoint_path)
-        if not os.path.exists(checkpoint_dir):
-            os.mkdir(checkpoint_dir)
-
-            
-        encoder_inputs = Input(shape=(18,sr*window_size,1))
-        encoder_outputs = AutoEncoder.FullChannelEncoder_for_CHB(inputs = encoder_inputs)
-        decoder_outputs = AutoEncoder.FullChannelDecoder_for_CHB(encoder_outputs)
-        autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
-        autoencoder_model.compile(optimizer = 'RMSprop', loss='mse')
-        if os.path.exists(checkpoint_path):
-            print("Model Loaded!")
-            autoencoder_model = tf.keras.models.load_model(checkpoint_path)
-
-    
-    autoencoder_model.summary()
+    train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
+    test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
+    edf_file_path = "/host/d/CHB"
 
     ## for window
     # train_info_file_path = "D:/SNU_DATA/patient_info_train.csv"
@@ -213,7 +174,22 @@ def train(model_name, type='snu'):
     (type_1_train_indexes, type_1_val_indexes) = next(type_1_kfold_set)
     (type_2_train_indexes, type_2_val_indexes) = next(type_2_kfold_set)
     (type_3_train_indexes, type_3_val_indexes) = next(type_3_kfold_set)
-    
+    checkpoint_path = f"AutoEncoder/{model_name}/cp.ckpt"
+    checkpoint_dir = os.path.dirname(checkpoint_path)
+    if not os.path.exists(checkpoint_dir):
+        os.mkdir(checkpoint_dir)
+
+        
+    encoder_inputs = Input(shape=(ch_num,sr*window_size,1))
+    encoder_outputs = AutoEncoder.FullChannelEncoder_for_CHB(inputs = encoder_inputs)
+    decoder_outputs = AutoEncoder.FullChannelDecoder_for_CHB(encoder_outputs)
+    autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
+    autoencoder_model.compile(optimizer = 'RMSprop', loss='mse')
+    if os.path.exists(checkpoint_path):
+        print("Model Loaded!")
+        autoencoder_model = tf.keras.models.load_model(checkpoint_path)
+
+    autoencoder_model.summary()
 
     logs = "logs/" + model_name + "-" + datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -244,16 +220,15 @@ def train(model_name, type='snu'):
                                             train_type_3[type_3_train_indexes],
                                             batch_size,
                                             model_name,
-                                            "train",
-                                            type
+                                            "train"
+                                            
                                             )
     validation_generator = autoencoder_generator(train_type_1[type_1_val_indexes], 
                                                     train_type_2[type_2_val_indexes],
                                                     train_type_3[type_3_val_indexes],
                                                     batch_size,
                                                     model_name,
-                                                    "val",
-                                                    type
+                                                    "val"
                                                     )
 # %%
     history = autoencoder_model.fit_generator(

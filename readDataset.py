@@ -35,9 +35,14 @@ def Interval2Segments(interval_list, data_path, window_size, sliding_size):
     return segments_list
 
 
-def Segments2Data(segments):
+def Segments2Data(segments, type='snu'):
     # segment[0] = 'filename', segment[1] = 'start', segment[2] = 'duration'
-    channels = ['Fp1-AVG', 'F3-AVG', 'C3-AVG', 'P3-AVG', 'Fp2-AVG', 'F4-AVG', 'C4-AVG', 'P4-AVG', 'F7-AVG', 'T1-AVG', 'T3-AVG', 'T5-AVG', 'O1-AVG', 'F8-AVG', 'T2-AVG', 'T4-AVG', 'T6-AVG', 'O2-AVG', 'Fz-AVG', 'Cz-AVG', 'Pz-AVG']
+    channels_snu = ['Fp1-AVG', 'F3-AVG', 'C3-AVG', 'P3-AVG', 'Fp2-AVG', 'F4-AVG', 'C4-AVG', 'P4-AVG', 'F7-AVG', 'T1-AVG', 'T3-AVG', 'T5-AVG', 'O1-AVG', 'F8-AVG', 'T2-AVG', 'T4-AVG', 'T6-AVG', 'O2-AVG', 'Fz-AVG', 'Cz-AVG', 'Pz-AVG']
+    channels_chb = ['FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3',
+                    'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4',
+                    'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
+                    'P8-O2', 'FZ-CZ', 'CZ-PZ']
+    channels_one = ['Fp1-AVG']
     signal_for_all_segments = []
     name = None
     read_end = 0
@@ -70,6 +75,13 @@ def Segments2Data(segments):
                 
         freq = f.getSampleFrequencies()
         labels = f.getSignalLabels()
+        if type=='snu':
+            channels = channels_snu
+        elif type=='chb':
+            channels = channels_chb
+        else:
+            channels = channels_one
+
         chn_num = len(channels)
 
         # UpSampling rate
@@ -79,36 +91,22 @@ def Segments2Data(segments):
         for i in range(len(interval_sets)):
             seg.append([])
 
-        try :
-            for channel in channels:
-                ch_idx = labels.index(channel)
-                edf_signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*(read_end-read_start)))
-                
-                # 128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
-                if not freq[ch_idx] == 128:
-                    signal = resample(edf_signal, int(len(edf_signal) / freq[ch_idx] * target_sampling_rate ))
-                
-                for j in range(len(interval_sets)):
-                    seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
         
-            for s in seg:    
-                signal_for_all_segments.append(s)
+        for channel in channels:
+            ch_idx = labels.index(channel)
+            edf_signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*(read_end-read_start)))
+            
+            # 128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
+            if not freq[ch_idx] == 128:
+                signal = resample(edf_signal, int(len(edf_signal) / freq[ch_idx] * target_sampling_rate ))
+            
+            for j in range(len(interval_sets)):
+                seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
+    
+        for s in seg:    
+            signal_for_all_segments.append(s)
 
-        except Exception as e:
-            print("Freq : %d"%freq[ch_idx])
-            print("labels")
-            print(labels)
-            print("Read start : %d  Read end : %d"%(read_start,read_end))
-            print("minus : %d sample num : %d"%(read_end-read_start, (read_end-read_start)*freq[ch_idx]))
-            print(f'shape of edf_signal : {np.shape(edf_signal)}')
-            print(f'shape of signal     : {np.shape(signal)}')
-            print(f'shape of seg        : {np.shape(seg[j])}')
-            print(f'file duration       : {f.getFileDuration()}')
-            print(f'filename : {name}')
-            print(segment)
-            print(e)
-            print(traceback.format_exc())
-            sys.exit()
+        
         skip_start = False
     
     if hasattr(f,'close'):
