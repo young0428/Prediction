@@ -10,13 +10,16 @@ state_list = ['ictal', 'preictal_late', 'preictal_early', 'preictal_ontime', 'po
 def LoadDataset(filename):
     df = pd.read_csv(filename)
     columns = ['name','start','end']
+    columns2 = ['name','start','end','state']
     interval_dict = {}
     for state in state_list:
         condition = df['state'] == state
         df_state = df[condition]
         interval_dict[state] = df_state[columns].values.tolist()
 
-    return interval_dict
+    whole_interval = df[columns2].values.tolist()
+
+    return interval_dict, whole_interval
 
 # state = ['ictal', 'preictal_late', 'preictal_early', 'preictal_ontime', 'postictal','interictal']
 # output = [name, start, window_size]

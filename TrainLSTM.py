@@ -134,6 +134,32 @@ def get_first_name_like_layer(model,name):
             return layer
 
 # %%
+def GetPatientName(intervals):
+    patient_name_list = []
+    for interval in intervals:
+        if not interval[0] in patient_name_list:
+            patient_name_list.append((interval[0].split('_'))[0])
+    return patient_name_list
+
+def IntervalFilteringByName(intervals, patient_name):
+    interval_for_name = []
+    for interval in intervals:
+        # CHB001_01 -> (CHB001,01), (CHB001,01)[0] = CHB001
+        if (interval[0].split('_'))[0] is patient_name:
+            interval_for_name.append(interval)
+    return interval_for_name
+
+def Interval2NameKeyDict(origin_intervals,states):
+    patient_name_list = GetPatientName(origin_intervals)
+    interval_dict_key_patient_name = {}
+    for patient_name in patient_name_list:
+        for s in states :
+            interval_dict_key_patient_name[patient_name] = IntervalFilteringByName(origin_intervals, patient_name)
+
+def 
+    
+
+
 def train(model_name, encoder_model_name, data_type = 'snu'):
     window_size = 5
     overlap_sliding_size = 5
@@ -197,12 +223,14 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
         encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
         encoder_model.trainable = False
 
-    
-    train_interval_set = LoadDataset(train_info_file_path)
+
+    train_interval_set, train_interval_overall = LoadDataset(train_info_file_path)
     train_segments_set = {}
 
-    test_interval_set = LoadDataset(test_info_file_path)
+    test_interval_set, train_interval_overall = LoadDataset(test_info_file_path)
     test_segments_set = {}
+
+    
 
     # 상대적으로 데이터 갯수가 적은 것들은 window_size 2초에 sliding_size 1초로 overlap 시켜 데이터 증강
     for state in ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early']:

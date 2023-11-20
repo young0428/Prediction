@@ -61,8 +61,6 @@ class ValidatonTestData :
                 print(f'\rTest Progress {"%.2f"%((idx+1)/len(batch_idx_seq)*100)}% ({idx+1}/{len(batch_idx_seq)})   Sensitivity : {"%.2f"%(sens*100)}    FAR : {"%.4f"%(far)}', end='')
             
             print("")
-            
-
 
     def GetPatientName(self, intervals):
         patient_name_list = []
