@@ -6,6 +6,7 @@ import operator
 import matplotlib.pyplot as plt
 import pickle
 import os
+import seaborn as sns
 
 import tensorflow as tf
 from tensorflow.keras.layers import Input
@@ -74,7 +75,7 @@ class ValidatonTestData :
 
     def IntervalSorting(self, interval_sets):
         state_list = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
-        state_dict = {'preictal_ontime':0, 'ictal':1, 'preictal_late':0, 'preictal_early':0, 'postictal':2,'interictal':2}
+        state_dict = {'preictal_ontime':1, 'ictal':0, 'preictal_late':1, 'preictal_early':1, 'postictal':0,'interictal':0}
         temp = []
         for state in state_list:
             for interval in interval_sets[state]:
@@ -209,11 +210,16 @@ def validation(lstm_model_name, data_type):
     # for WSL
     #lstm_model_name = "paper_base_rawEEG_categorical"
     if data_type == 'snu':
-        test_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_test.csv"
-        edf_file_path = "/host/d/SNU_DATA"
+        # test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
+        # edf_file_path = "/host/d/SNU_DATA"
+        test_info_file_path = "/home/SNU_DATA/patient_info_snu_test.csv"
+        edf_file_path = "/home/SNU_DATA"
     else:
-        test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
-        edf_file_path = "/host/d/CHB"
+        # test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
+        # edf_file_path = "/host/d/CHB"
+
+        test_info_file_path = "/home/CHB/patient_info_chb_test.csv"
+        edf_file_path = "/home/CHB"
 
     # # for window
     # test_info_file_path = "D:/SNU_DATA/SNU_patient_info_test.csv"
@@ -231,32 +237,13 @@ def validation(lstm_model_name, data_type):
     sens,far = val_object.Calc()
     return val_object.matrix, val_object.tf_matrix, sens, far
 
-    # sorted_intervals = val_object.IntervalSorting(val_object.interval_sets) # [환자명, start, end, state_label]
-    # print(sorted_intervals[0:5])
-    # patient_name_list = val_object.GetPatientName(sorted_intervals)
-    # print(patient_name_list[0:5])
-    # val_object.SetKN(5,3)
-    # #%%
 
-    # val_object.LoadFileData(patient_name_list[0])
-    # print(f'signal shape : {np.shape(val_object.full_signal)}')
-    # #%%
-    # val_object.MakeSegments(val_object.patient_dict[patient_name_list[0]])
-    # print(f'segment shape : {np.shape(val_object.segments)}')
-    # #%%   
-    # batch_idx_seq = val_object.GetBatchIndexes()
-    # val_object.labels = np.array(val_object.labels)
-    # for idx, batch_idx in enumerate(batch_idx_seq):
-    #     val_object.Segments2Data(val_object.segments[batch_idx], val_object.labels[batch_idx])
-    #     val_object.Predict()
-    #     val_object.PostProcessing()
-    #     val_object.Result2Mat()
-    #     sens, far = val_object.Calc()
-    #     print(f'\rTest Progress {"%.2f"%((idx+1)/len(batch_idx_seq)*100)}% ({idx+1}/{len(batch_idx_seq)})   Sensitivity : {"%.2f"%(sens*100)}    FAR : {"%.4f"%(far)}', end='')
-    #     #print(f'batch_x shape : {np.shape(val_object.batch_x)}')
-    #     #print(f'true    shape : {np.shape(val_object.true)}')
-    #     #print(f'Predict : {val_object.predict[0:25]}')
-
+def SaveAsHeatmap(matrix, path):
+    sns.heatmap(matrix,annot=True, cmap='Blues')
+    plt.xlabel('Predict')
+    plt.ylabel('True')
+    plt.savefig(path)
+    plt.clf()
 
 
 

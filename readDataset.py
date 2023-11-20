@@ -43,6 +43,13 @@ def Segments2Data(segments, type='snu'):
                     'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
                     'P8-O2', 'FZ-CZ', 'CZ-PZ']
     channels_one = ['Fp1-AVG']
+    if type=='snu':
+        channels = channels_snu
+    elif type=='chb':
+        channels = channels_chb
+    else:
+        channels = channels_one
+
     signal_for_all_segments = []
     name = None
     read_end = 0
@@ -56,6 +63,12 @@ def Segments2Data(segments, type='snu'):
             f = pyedflib.EdfReader(segment[0])
             skip_start = False   # 연속된 시간이면 한번에 읽기 위해 파일 읽는 시작 시간은 그대로 두고 끝 시간만 갱신함
 
+        freq = f.getSampleFrequencies()
+        labels = f.getSignalLabels()
+        
+        if not all([channel in labels for channel in channels]):
+            f.close()
+            continue
 
         if not skip_start:
             interval_sets = [] # 연속된 구간이면 한번에 읽고 구간 정해진거에 따라 나누기 위해 구간 저장
@@ -73,14 +86,7 @@ def Segments2Data(segments, type='snu'):
                 continue
         skip_start = False
                 
-        freq = f.getSampleFrequencies()
-        labels = f.getSignalLabels()
-        if type=='snu':
-            channels = channels_snu
-        elif type=='chb':
-            channels = channels_chb
-        else:
-            channels = channels_one
+        
 
         chn_num = len(channels)
 
@@ -109,8 +115,7 @@ def Segments2Data(segments, type='snu'):
         
         skip_start = False
     
-    if hasattr(f,'close'):
-        f.close()
+    del f
 
     return np.array(signal_for_all_segments)/10
 

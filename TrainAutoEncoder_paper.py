@@ -118,8 +118,8 @@ def train(model_name, type='snu'):
 
     # for WSL
     if type=='snu':
-        train_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_train.csv"
-        test_info_file_path = "/host/d/SNU_DATA/SNU_patient_info_test.csv"
+        train_info_file_path = "/host/d/SNU_DATA/patient_info_snu_train.csv"
+        test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
         edf_file_path = "/host/d/SNU_DATA"
 
         checkpoint_path = f"AutoEncoder/{model_name}/cp.ckpt"
