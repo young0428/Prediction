@@ -100,11 +100,6 @@ class autoencoder_generator(Sequence):
         x_batch = Segments2Data(input_seg, self.data_type)
         x_batch = PreProcessing.FilteringSegments(x_batch)
 
-        # if (idx+1) % int(self.batch_num / 3) == 0 and self.gen_type == "train":
-        #     self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
-        #     self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
-        #     self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
-  
         return x_batch, x_batch
 
 # %%

@@ -197,7 +197,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
         encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
         encoder_model.trainable = False
 
-
+    
     train_interval_set = LoadDataset(train_info_file_path)
     train_segments_set = {}
 
@@ -280,10 +280,13 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                                                     verbose=0)
     
     #train_generator = FullModel_generator(train_type_1[type_1_train_indexes], train_type_2[type_2_train_indexes], train_type_3[type_3_train_indexes],batch_size,data_type)
+    
+    # %%
+    
     train_generator = FullModel_generator(train_type_1, train_type_2, train_type_3,batch_size,data_type)
     validation_generator = FullModel_generator(train_type_1[type_1_val_indexes], train_type_2[type_2_val_indexes], train_type_3[type_3_val_indexes],batch_size,data_type)
     test_generator = FullModel_generator(test_type_1, test_type_2, test_type_3, batch_size,data_type)
-# %%
+
     history = full_model.fit_generator(
                 train_generator,
                 epochs = epochs,
@@ -296,4 +299,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
     with open(f'./LSTM/{model_name}/trainHistoryDict', 'wb') as file_pi:
         pickle.dump(history.history, file_pi)
 
-
+encoder_model_name = "paper_base_encoder_128_chb_use_alldata"
+lstm_model_name = "paper_base_128ch_categorical_chb_binary"
+#%%
+train(lstm_model_name,encoder_model_name,'chb')
