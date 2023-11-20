@@ -64,17 +64,14 @@ class FullModel_generator(Sequence):
             self.ratio_idx = int(self.epoch/self.update_period)
         else:
             self.ratio_idx = 3
-        if self.ratio_idx < 2:
-            self.ratio_idx += 1
 
-        self.ratio_idx = 3
         # ratio에 따라 데이터 갯수 정함
         self.type_1_sampled_len = len(self.type_1_data)
         self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_2[self.ratio_idx]),len(self.type_2_data))
         self.type_3_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_3[self.ratio_idx]), len(self.type_3_data))
         # Sampling mask 생성
-        self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
-        self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
+        self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len-1, replace=False))
+        self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len-1, replace=False))
 
         self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
         self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
@@ -121,16 +118,17 @@ class FullModel_generator(Sequence):
             type_3_len = len(x_batch_type_3)
         else:
             type_3_len = 0
+
         x_batch = PreProcessing.FilteringSegments(x_batch)
-        y_categorical = np.concatenate( ( np.ones(type_1_len)*1, 
-                                   (np.ones(type_2_len))*0, 
-                                   (np.ones(type_3_len))*0))
-        y_categorical = np.asarray(y_categorical, dtype='int16')
-        y_batch = self.iden_mat[y_categorical]
+        y_batch = np.concatenate( ( np.ones(type_1_len)*1, 
+                                   np.ones(type_2_len)*0, 
+                                   np.ones(type_3_len)*0))
+        
+        #y_batch = self.iden_mat[y_categorical]
 
         return x_batch, y_batch
     
-def get_first_name_like_layer(model,name):
+def get_first_name_like_layer(model,name):  
     for layer in model.layers:
         if name in layer.name:
             return layer
@@ -138,7 +136,7 @@ def get_first_name_like_layer(model,name):
 # %%
 def train(model_name, encoder_model_name, data_type = 'snu'):
     window_size = 5
-    overlap_sliding_size = 2
+    overlap_sliding_size = 5
     normal_sliding_size = window_size
     sr = 128
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
@@ -250,10 +248,10 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
 
     full_model.compile(optimizer = 'Adam',
                         metrics=[
-                                tf.keras.metrics.CategoricalAccuracy(),
-                                tf.keras.metrics.Recall(class_id=0)
+                                tf.keras.metrics.BinaryAccuracy(threshold=0),
+                                tf.keras.metrics.Recall(thresholds=0)
                                 ] ,
-                        loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.05) )
+                        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True, label_smoothing=0.05) )
 
     if os.path.exists(checkpoint_path):
         print("Model Loaded!")
