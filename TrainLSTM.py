@@ -156,7 +156,25 @@ def Interval2NameKeyDict(origin_intervals,states):
         for s in states :
             interval_dict_key_patient_name[patient_name] = IntervalFilteringByName(origin_intervals, patient_name)
 
-def 
+def SelectValidationInterval(patient_specific_intervals):
+    true_state = ['preictal_ontime', 'preictal_late', 'preictal_early', 'ictal']
+    false_state =['interictal','postictal']
+    start_idx = -1
+    end_idx = -1
+    start_time = -1
+    end_time = -1
+
+    for idx, interval in enumerate(patient_specific_intervals):
+        if interval[3] in true_state:
+            if start_idx == -1:
+                start_idx = idx
+                start_time = interval[1]
+            if (start_idx != -1) and (interval[3] is 'ictal'):
+                end_idx = idx+1
+                end_time = interval[2]
+            
+
+            
     
 
 
