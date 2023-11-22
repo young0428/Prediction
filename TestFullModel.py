@@ -21,6 +21,7 @@ from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
 from scipy.signal import resample
 import PreProcessing
+from sklearn.metrics import confusion_matrix
 
 import pyedflib
 
@@ -37,17 +38,17 @@ class ValidatonTestData :
         self.target_sr = 128
         self.duration = 0
         self.alarm_interval = 10
-        self.cat_num = 3
+        self.cat_num = 2
         self.matrix = np.zeros(shape=(self.cat_num, self.cat_num))
         self.tf_matrix = np.zeros(shape=(2,2))
         self.batch_size = batch_size
         self.patient_dict = {}
 
-    def start(self):
+    def start(self,k,n):
         sorted_intervals = self.IntervalSorting(self.interval_sets) # [환자명, start, end, state_label]
         self.sorted_intervals = sorted_intervals
         patient_name_list = self.GetPatientName(sorted_intervals)
-        self.SetKN(5,3)
+        self.SetKN(k,n)
         for patient in patient_name_list:
             self.LoadFileData(patient)
             self.MakeSegments(self.patient_dict[patient])
@@ -150,7 +151,14 @@ class ValidatonTestData :
     def Predict(self):
         self.batch_x = np.expand_dims(self.batch_x,axis=-1)
         self.predict = self.model.predict_on_batch(self.batch_x)
-        self.pred_cat = np.argmax(self.predict,axis=1)
+        self.pred_cat = ((tf.squeeze(tf.round(tf.nn.sigmoid(self.predict)))).numpy()).astype(int).tolist()
+
+        mat = confusion_matrix(self.true, self.pred_cat).ravel()
+        if len(mat) != 1:
+            if ((mat[2]!=0) or (mat[3]!=0)):
+                print(mat)
+        
+
 
     # K of N을 적용해서 alarm 울림 (1), alarm 안울림 (0) 결정
     # 데이터 
@@ -162,13 +170,13 @@ class ValidatonTestData :
             true_cnt = 0
             # category 0 == preictal, category 1 == ictal, category3 = post, interictal
             # category0 이면 1(True)로 category1 or 2 이면 0(False)으로
-            if self.true[i*self.k] == 0 :
+            if self.true[i*self.k] == 1 :
                 self.true_k_of_n.append(1)
             else:
                 self.true_k_of_n.append(0)
             # Prediction 결과에 K of N 수행
             for j in range(self.k):
-                if self.pred_cat[i*self.k+j] == 0 :
+                if self.pred_cat[i*self.k+j] == 1 :
                     true_cnt += 1
 
             if true_cnt >= self.n:
@@ -184,7 +192,10 @@ class ValidatonTestData :
             self.tf_matrix[self.true_k_of_n[idx],self.pred_k_of_n[idx]] += 1 
 
     def Calc(self):
-        sensitivity = self.tf_matrix[1,1] / (self.tf_matrix[1,0] + self.tf_matrix[1,1])
+        if  not (self.tf_matrix[1,0] + self.tf_matrix[1,1]) == 0:
+            sensitivity = self.tf_matrix[1,1] / (self.tf_matrix[1,0] + self.tf_matrix[1,1])
+        else:
+            sensitivity = 0
         false_alarm_rate =  self.tf_matrix[0,1] * ( 3600 / ((self.tf_matrix[0,0] + self.tf_matrix[0,1]) * self.alarm_interval))
         return sensitivity, false_alarm_rate
     
@@ -197,7 +208,7 @@ class ValidatonTestData :
         return self.edf_file_path+'/'+(patient_name.split('_'))[0]+'/'+patient_name+'.edf'
 
 #%%
-def validation(lstm_model_name, data_type):
+def validation(lstm_model_name, data_type,k,n):
     window_size = 5
     overlap_sliding_size = 1
     normal_sliding_size = 1
@@ -228,10 +239,10 @@ def validation(lstm_model_name, data_type):
 
     fullmodel = tf.keras.models.load_model(checkpoint_path)
 
-    test_interval_set = LoadDataset(test_info_file_path)
+    test_interval_set,_ = LoadDataset(test_info_file_path)
     val_object = ValidatonTestData(test_interval_set, window_size, fullmodel, test_batch_size, test_info_file_path, edf_file_path, data_type)
     # %%
-    val_object.start()
+    val_object.start(k,n)
     sens,far = val_object.Calc()
     return val_object.matrix, val_object.tf_matrix, sens, far
 
