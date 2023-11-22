@@ -19,7 +19,7 @@ from tensorflow.keras.utils import Sequence
 from tensorflow.keras.metrics import F1Score, Recall, Precision
 
 
-from readDataset import LoadDataset, Interval2Segments, Segments2Data
+from readDataset import *
 import AutoEncoder 
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
@@ -50,48 +50,31 @@ class FullModel_generator(Sequence):
         self.type_1_data = type_1_data
         self.type_2_data = type_2_data
         self.type_3_data = type_3_data
+        self.type_1_len = len(type_1_data)
+        self.type_2_len = len(type_2_data)
+        self.type_3_len = len(type_3_data)
         self.data_type = data_type
 
+        self.iden_mat = np.eye(2)
 
-        self.update_data()
+        self.batch_set = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[0], self.ratio_type_2[0], self.ratio_type_3[0]])
 
     def on_epoch_end(self):
         self.epoch += 1
-        self.update_data()
-
-    def update_data(self):
-        # 데이터 밸런스를 위해 데이터 밸런스 조절 및 resampling
         if self.epoch/self.update_period < 4:
             self.ratio_idx = int(self.epoch/self.update_period)
         else:
             self.ratio_idx = 3
 
-        # ratio에 따라 데이터 갯수 정함
-        self.type_1_sampled_len = len(self.type_1_data)
-        self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_2[self.ratio_idx]),len(self.type_2_data))
-        self.type_3_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_3[self.ratio_idx]), len(self.type_3_data))
-        # Sampling mask 생성
-        self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len-1, replace=False))
-        self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len-1, replace=False))
-
-        self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
-        self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
-
-        self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
-        
-        self.type_1_batch_indexes = PreProcessing.GetBatchIndexes(self.type_1_sampled_len, self.batch_num, 0)
-        self.type_2_batch_indexes = PreProcessing.GetBatchIndexes(self.type_2_sampled_len, self.batch_num, 0)
-        self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num, 0)
-        
-        self.iden_mat = np.eye(2)
+        self.batch_set = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[self.ratio_idx], self.ratio_type_2[self.ratio_idx], self.ratio_type_3[self.ratio_idx]])        
     
     def __len__(self):
         return self.batch_num
     
     def __getitem__(self, idx):
-        x_batch_type_1 = Segments2Data(self.type_1_data[self.type_1_batch_indexes[idx]],self.data_type)
-        x_batch_type_2 = Segments2Data(self.type_2_data[self.type_2_batch_indexes[idx]],self.data_type)
-        x_batch_type_3 = Segments2Data(self.type_3_data[self.type_3_batch_indexes[idx]],self.data_type)
+        x_batch_type_1 = Segments2Data(self.type_1_data[self.batch_set[0][self.batch_set[1]]],self.data_type)
+        x_batch_type_2 = Segments2Data(self.type_2_data[self.batch_set[2][self.batch_set[3]]],self.data_type)
+        x_batch_type_3 = Segments2Data(self.type_3_data[self.batch_set[4][self.batch_set[5]]],self.data_type)
         x_batch = None
         if x_batch_type_1.ndim == 3:
             if np.all(x_batch== None):
@@ -128,126 +111,6 @@ class FullModel_generator(Sequence):
         #y_batch = self.iden_mat[y_categorical]
 
         return x_batch, y_batch
-    
-def get_first_name_like_layer(model,name):  
-    for layer in model.layers:
-        if name in layer.name:
-            return layer
-
-# %%
-def GetPatientName(intervals):
-    patient_name_list = []
-    for interval in intervals:
-        if not interval[0] in patient_name_list:
-            patient_name_list.append((interval[0].split('_'))[0])
-    return patient_name_list
-
-def IntervalFilteringByName(intervals, patient_name):
-    interval_for_name = []
-    for interval in intervals:
-        # CHB001_01 -> (CHB001,01), (CHB001,01)[0] = CHB001
-        if (interval[0].split('_'))[0] is patient_name:
-            interval_for_name.append(interval)
-    return interval_for_name
-
-#interval = [name, start, end, state]
-# interval과 state를 주면 환자 이름별로 interval 모아줌
-def Interval2NameKeyDict(origin_intervals,states):
-    patient_name_list = GetPatientName(origin_intervals)
-    interval_dict_key_patient_name = {}
-    for patient_name in patient_name_list:
-        for s in states :
-            interval_dict_key_patient_name[patient_name] = IntervalFilteringByName(origin_intervals, patient_name)
-
-    return interval_dict_key_patient_name
-
-# ictal이 2번 이상인 환자만 뽑아서 dictionary return
-def FilterValidatePatient(interval_dict):
-    ictal_count = {}
-    validate_patient_dict = {}
-    for patient_name in interval_dict.keys():
-        ictal_cnt = 0
-        for idx, interval in enumerate(interval_dict[patient_name]):
-            # ictal이 파일 사이에 걸쳐 있을 경우, state가 ictal인 interval이 2번 연속으로 나올 경우
-            # 뒤의 ictal은 count 안함
-            if interval[3] is 'ictal':
-                if idx-1 > 0:
-                    if interval_dict[patient_name][idx-1][3] == 'ictal':
-                        continue
-                ictal_cnt += 1
-        ictal_count[patient_name] = ictal_cnt
-        if ictal_cnt >= 2 :
-            validate_patient_dict[patient_name] = interval_dict[patient_name]
-    return validate_patient_dict
-
-def SelectValidationInterval(patient_specific_intervals):
-    true_state = ['preictal_ontime', 'preictal_late', 'preictal_early', 'ictal']
-    false_state =['interictal','postictal']
-    start_idx = -1
-    end_idx = -1
-    start_time = -1
-    end_time = -1
-    train_val_set = []
-
-    for idx, interval in enumerate(patient_specific_intervals):
-        if interval[3] in true_state:
-            if start_idx == -1:
-                start_idx = idx
-                start_time = interval[1]
-
-            if (start_idx != -1) and (interval[3] is 'ictal'):
-                if idx+1 < len(patient_specific_intervals):
-                    if patient_specific_intervals[idx+1][3] is 'ictal' : continue
-                end_idx = idx
-                val_idx_list = []
-                state2find = 'interictal'
-                direction = 'backward'
-                remain_period = 1800
-                intervals_copied = copy.deepcopy(patient_specific_intervals)
-                train_val_dict = {'train':[], 'val':[]}
-                while True:
-                    interval_idx = FindStateIntervalIdx(intervals_copied, start_idx, direction, state2find)
-                    if interval_idx == -1:
-                        if (state2find is 'interictal') and  (direction is 'backward'):
-                            direction = 'forward'
-                            continue
-                        if (state2find is 'interictal') and (direction is 'forward'):
-                            state2find='postictal'
-                            continue
-                        if state2find == 'postictal':
-                            break
-                    interictal_period = intervals_copied[interval_idx][2] - intervals_copied[interval_idx][1]
-                    if remain_period - interictal_period > 0 :
-                        val_idx_list.append(interval_idx)
-                        remain_period -= interictal_period
-                        continue
-                    if remain_period - interictal_period == 0:
-                        val_idx_list.append(interval_idx)
-                        break
-                    if remain_period - interictal_period < 0:
-                        temp = copy.deepcopy(intervals_copied[interval_idx])
-                       
-                        if direction is 'backward':
-                            temp[1] = intervals_copied[interval_idx][2] - remain_period
-                            train_val_dict['val'].append(temp)
-                            intervals_copied[interval_idx][2] = temp[1]
-
-                        elif direction is 'forward':
-                            temp[2] = intervals_copied[interval_idx][1] + remain_period
-                            train_val_dict['val'].append(temp)
-                            intervals_copied[interval_idx][1] = temp[2]
-                        break
-
-
-def FindStateIntervalIdx(patient_specific_intervals, idx, direction, state):
-    while True:
-        if direction is 'forward':
-            idx += 1
-            if idx >= len(patient_specific_intervals) : return -1
-        if direction is 'backward':
-            idx -= 1
-            if idx < 0 : return -1
-        if patient_specific_intervals[idx][3] is state: return idx
 
 def train(model_name, encoder_model_name, data_type = 'snu'):
     window_size = 5

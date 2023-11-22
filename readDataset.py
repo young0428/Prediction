@@ -1,8 +1,8 @@
 import pyedflib
 import numpy as np
 import pandas as pd
-import sys
-import traceback
+import copy
+import PreProcessing
 from scipy.signal import resample
 # 데이터 정리 
 global state_list
@@ -13,13 +13,147 @@ def LoadDataset(filename):
     columns2 = ['name','start','end','state']
     interval_dict = {}
     for state in state_list:
-        condition = df['state'] == state
+        condition = df['state']  ==  state
         df_state = df[condition]
         interval_dict[state] = df_state[columns].values.tolist()
 
     whole_interval = df[columns2].values.tolist()
 
     return interval_dict, whole_interval
+
+    
+def get_first_name_like_layer(model,name):  
+    for layer in model.layers:
+        if name in layer.name:
+            return layer
+
+# %%
+def GetPatientName(intervals):
+    patient_name_list = []
+    for interval in intervals:
+        if not interval[0] in patient_name_list:
+            patient_name_list.append((interval[0].split('_'))[0])
+    return patient_name_list
+
+def IntervalFilteringByName(intervals, patient_name):
+    interval_for_name = []
+    for interval in intervals:
+        # CHB001_01 -> (CHB001,01), (CHB001,01)[0] = CHB001
+        if (interval[0].split('_'))[0] == patient_name:
+            interval_for_name.append(interval)
+    return interval_for_name
+
+#interval = [name, start, end, state]
+# interval과 state를 주면 환자 이름별로 interval 모아줌
+def Interval2NameKeyDict(origin_intervals,states):
+    patient_name_list = GetPatientName(origin_intervals)
+    interval_dict_key_patient_name = {}
+    for patient_name in patient_name_list:
+        for s in states :
+            interval_dict_key_patient_name[patient_name] = IntervalFilteringByName(origin_intervals, patient_name)
+
+    return interval_dict_key_patient_name
+
+# ictal이 2번 이상인 환자만 뽑아서 dictionary return
+def FilterValidatePatient(interval_dict):
+    ictal_count = {}
+    validate_patient_dict = {}
+    for patient_name in interval_dict.keys():
+        ictal_cnt = 0
+        for idx, interval in enumerate(interval_dict[patient_name]):
+            # ictal이 파일 사이에 걸쳐 있을 경우, state가 ictal인 interval이 2번 연속으로 나올 경우
+            # 뒤의 ictal은 count 안함
+            if interval[3] == 'ictal':
+                if idx-1 > 0:
+                    if interval_dict[patient_name][idx-1][3]  ==  'ictal':
+                        continue
+                ictal_cnt += 1
+        ictal_count[patient_name] = ictal_cnt
+        if ictal_cnt >= 2 :
+            validate_patient_dict[patient_name] = interval_dict[patient_name]
+    return validate_patient_dict
+
+def MakeValidationIntervalSet(patient_specific_intervals):
+    true_state = ['preictal_ontime', 'preictal_late', 'preictal_early', 'ictal']
+    false_state =['interictal','postictal']
+    start_idx = -1
+    end_idx = -1
+    start_time = -1
+    end_time = -1
+    train_val_set = []
+
+    for idx, interval in enumerate(patient_specific_intervals):
+        if interval[3] in true_state:
+            if start_idx  ==  -1:
+                start_idx = idx
+            if (start_idx != -1) and (interval[3] == 'ictal'):
+                if idx+1 < len(patient_specific_intervals):
+                    if patient_specific_intervals[idx+1][3] == 'ictal' : continue
+                start_idx = -1
+                end_idx = idx
+                val_idx_list = []
+                state2find = 'interictal'
+                direction = 'backward'
+                remain_period = 1800
+                intervals_copied = copy.deepcopy(patient_specific_intervals)
+                train_val_dict = {'train':[], 'val':[]}
+
+                while True:
+                    interval_idx = FindStateIntervalIdx(intervals_copied, start_idx, direction, state2find)
+                    if interval_idx  ==  -1:
+                        if (state2find == 'interictal') and  (direction == 'backward'):
+                            direction = 'forward'
+                            continue
+                        if (state2find == 'interictal') and (direction == 'forward'):
+                            state2find='postictal'
+                            continue
+                        if state2find  ==  'postictal':
+                            val_idx_list += list(range(start_idx, end_idx+1))
+                            break
+                    interictal_period = intervals_copied[interval_idx][2] - intervals_copied[interval_idx][1]
+                    if remain_period - interictal_period > 0 :
+                        val_idx_list.append(interval_idx)
+                        remain_period -= interictal_period
+                        continue
+                    if remain_period - interictal_period  ==  0:
+                        val_idx_list.append(interval_idx)
+                        break
+                    if remain_period - interictal_period < 0:
+                        temp = copy.deepcopy(intervals_copied[interval_idx])
+                       
+                        if direction == 'backward':
+                            temp[1] = intervals_copied[interval_idx][2] - remain_period
+                            train_val_dict['val'].append(temp)
+                            intervals_copied[interval_idx][2] = temp[1]
+
+                        elif direction == 'forward':
+                            temp[2] = intervals_copied[interval_idx][1] + remain_period
+                            train_val_dict['val'].append(temp)
+                            intervals_copied[interval_idx][1] = temp[2]
+                        break
+
+                intervals_copied = np.array(intervals_copied)
+                train_mask = np.ones(len(intervals_copied), dtype=bool)
+                train_mask[val_idx_list] = False
+                train_val_dict['train'] = intervals_copied[train_mask].tolist()
+
+                val_mask = np.zeros(len(intervals_copied), dtype=bool)
+                val_mask[val_idx_list] = True
+                train_val_dict['val'] += intervals_copied[val_mask].tolist()
+                
+                train_val_set.append(train_val_dict)
+
+
+def FindStateIntervalIdx(patient_specific_intervals, idx, direction, state):
+    while True:
+        if direction == 'forward':
+            idx += 1
+            if idx >= len(patient_specific_intervals) : return -1
+        if direction == 'backward':
+            idx -= 1
+            if idx < 0 : return -1
+        if patient_specific_intervals[idx][3] == state: return idx
+
 
 # state = ['ictal', 'preictal_late', 'preictal_early', 'preictal_ontime', 'postictal','interictal']
 # output = [name, start, window_size]
@@ -46,9 +180,9 @@ def Segments2Data(segments, type='snu'):
                     'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
                     'P8-O2', 'FZ-CZ', 'CZ-PZ']
     channels_one = ['Fp1-AVG']
-    if type=='snu':
+    if type == 'snu':
         channels = channels_snu
-    elif type=='chb':
+    elif type == 'chb':
         channels = channels_chb
     else:
         channels = channels_one
@@ -121,6 +255,26 @@ def Segments2Data(segments, type='snu'):
     del f
 
     return np.array(signal_for_all_segments)/10
+
+def updateDataSet(type_1_len, type_2_len, type_3_len, portion, batch_size):
+    n = int(min(type_1_len/portion[0], type_2_len/portion[1], type_3_len/portion[2]))
+
+    type_1_sample_num = int(n*portion[0])
+    type_2_sample_num = int(n*portion[1])
+    type_3_sample_num = int(n*portion[2])
+
+    # Sampling mask 생성
+    type_1_sampling_mask = sorted(np.random.choice(type_1_len, type_1_sample_num, replace=False))
+    type_2_sampling_mask = sorted(np.random.choice(type_2_len, type_2_sample_num, replace=False))
+    type_3_sampling_mask = sorted(np.random.choice(type_3_len, type_3_sample_num, replace=False))
+
+    batch_num = int((type_1_sample_num+type_2_sample_num+type_3_sample_num)/batch_size)
+    
+    type_1_batch_indexes = PreProcessing.GetBatchIndexes(type_1_sample_num, batch_num, 0)
+    type_2_batch_indexes = PreProcessing.GetBatchIndexes(type_2_sample_num, batch_num, 0)
+    type_3_batch_indexes = PreProcessing.GetBatchIndexes(type_3_sample_num, batch_num, 0)
+
+    return [type_1_sampling_mask, type_1_batch_indexes, type_2_sampling_mask,  type_2_batch_indexes, type_3_sampling_mask, type_3_batch_indexes]
 
 
 ####    test code    ####
