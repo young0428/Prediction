@@ -7,6 +7,10 @@ from scipy.signal import resample
 # 데이터 정리 
 global state_list
 state_list = ['ictal', 'preictal_late', 'preictal_early', 'preictal_ontime', 'postictal','interictal']
+
+def MakePath(filename, data_path):
+    return data_path+'/'+(filename.split('_'))[0]+'/'+filename+'.edf'
+
 def LoadDataset(filename):
     df = pd.read_csv(filename)
     columns = ['name','start','end']
@@ -31,7 +35,7 @@ def get_first_name_like_layer(model,name):
 def GetPatientName(intervals):
     patient_name_list = []
     for interval in intervals:
-        if not interval[0] in patient_name_list:
+        if not (interval[0].split('_'))[0] in patient_name_list:
             patient_name_list.append((interval[0].split('_'))[0])
     return patient_name_list
 
@@ -45,12 +49,11 @@ def IntervalFilteringByName(intervals, patient_name):
 
 #interval = [name, start, end, state]
 # interval과 state를 주면 환자 이름별로 interval 모아줌
-def Interval2NameKeyDict(origin_intervals,states):
+def Interval2NameKeyDict(origin_intervals):
     patient_name_list = GetPatientName(origin_intervals)
     interval_dict_key_patient_name = {}
     for patient_name in patient_name_list:
-        for s in states :
-            interval_dict_key_patient_name[patient_name] = IntervalFilteringByName(origin_intervals, patient_name)
+        interval_dict_key_patient_name[patient_name] = IntervalFilteringByName(origin_intervals, patient_name)
 
     return interval_dict_key_patient_name
 
@@ -71,7 +74,38 @@ def FilterValidatePatient(interval_dict):
         ictal_count[patient_name] = ictal_cnt
         if ictal_cnt >= 2 :
             validate_patient_dict[patient_name] = interval_dict[patient_name]
-    return validate_patient_dict
+            ictal_count[patient_name] = ictal_cnt
+    return validate_patient_dict, ictal_count
+
+def FilteringByChannel(intervals, edf_path, type):
+    channels_snu = ['Fp1-AVG', 'F3-AVG', 'C3-AVG', 'P3-AVG', 'Fp2-AVG', 'F4-AVG', 
+                    'C4-AVG', 'P4-AVG', 'F7-AVG', 'T1-AVG', 'T3-AVG', 'T5-AVG', 
+                    'O1-AVG', 'F8-AVG', 'T2-AVG', 'T4-AVG', 'T6-AVG', 'O2-AVG', 'Fz-AVG', 'Cz-AVG', 'Pz-AVG']
+    
+    channels_chb = ['FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3',
+                    'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4',
+                    'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
+                    'P8-O2', 'FZ-CZ', 'CZ-PZ']
+    channels_one = ['Fp1-AVG']
+
+    if type == 'snu':
+        channels = channels_snu
+    elif type == 'chb':
+        channels = channels_chb
+    else:
+        channels = channels_one
+    copied_intervals = copy.deepcopy(intervals)
+    
+    mask = np.ones(len(copied_intervals),dtype=bool)
+    del_cnt = 0
+    for idx,interval in enumerate(copied_intervals):
+        with pyedflib.EdfReader(MakePath(interval[0], edf_path)) as f:
+            labels = f.getSignalLabels()
+            if not all([channel in labels for channel in channels]):
+                del copied_intervals[idx-del_cnt]
+                del_cnt+=1
+
+    return copied_intervals
 
 def MakeValidationIntervalSet(patient_specific_intervals):
     true_state = ['preictal_ontime', 'preictal_late', 'preictal_early', 'ictal']
@@ -89,23 +123,34 @@ def MakeValidationIntervalSet(patient_specific_intervals):
             if (start_idx != -1) and (interval[3] == 'ictal'):
                 if idx+1 < len(patient_specific_intervals):
                     if patient_specific_intervals[idx+1][3] == 'ictal' : continue
-                start_idx = -1
+                
                 end_idx = idx
                 val_idx_list = []
                 state2find = 'interictal'
                 direction = 'backward'
+                done_flag = False
                 remain_period = 1800
                 intervals_copied = copy.deepcopy(patient_specific_intervals)
                 train_val_dict = {'train':[], 'val':[]}
+                interval_idx = start_idx
 
                 while True:
-                    interval_idx = FindStateIntervalIdx(intervals_copied, start_idx, direction, state2find)
+                    interval_idx = FindStateIntervalIdx(intervals_copied, interval_idx, direction, state2find)
+                    if done_flag :
+                        done_flag = False
+                        interval_idx = -1
+                        
                     if interval_idx  ==  -1:
                         if (state2find == 'interictal') and  (direction == 'backward'):
+                            if remain_period <= 0:
+                                state2find = 'postictal'
+                                remain_period = 1800
                             direction = 'forward'
+                            interval_idx = end_idx
                             continue
                         if (state2find == 'interictal') and (direction == 'forward'):
                             state2find='postictal'
+                            remain_period = 1800
                             continue
                         if state2find  ==  'postictal':
                             val_idx_list += list(range(start_idx, end_idx+1))
@@ -114,13 +159,15 @@ def MakeValidationIntervalSet(patient_specific_intervals):
                     if remain_period - interictal_period > 0 :
                         val_idx_list.append(interval_idx)
                         remain_period -= interictal_period
+                        done_flag = False
                         continue
                     if remain_period - interictal_period  ==  0:
                         val_idx_list.append(interval_idx)
-                        break
+                        remain_period -= interictal_period
+                        done_flag = True
+                        continue
                     if remain_period - interictal_period < 0:
                         temp = copy.deepcopy(intervals_copied[interval_idx])
-                       
                         if direction == 'backward':
                             temp[1] = intervals_copied[interval_idx][2] - remain_period
                             train_val_dict['val'].append(temp)
@@ -130,7 +177,9 @@ def MakeValidationIntervalSet(patient_specific_intervals):
                             temp[2] = intervals_copied[interval_idx][1] + remain_period
                             train_val_dict['val'].append(temp)
                             intervals_copied[interval_idx][1] = temp[2]
-                        break
+                        done_flag = True
+                        remain_period -= interictal_period
+                        continue
 
                 intervals_copied = np.array(intervals_copied)
                 train_mask = np.ones(len(intervals_copied), dtype=bool)
@@ -142,7 +191,9 @@ def MakeValidationIntervalSet(patient_specific_intervals):
                 train_val_dict['val'] += intervals_copied[val_mask].tolist()
                 
                 train_val_set.append(train_val_dict)
+                start_idx = -1
 
+    return train_val_set
 
 def FindStateIntervalIdx(patient_specific_intervals, idx, direction, state):
     while True:
@@ -166,7 +217,7 @@ def Interval2Segments(interval_list, data_path, window_size, sliding_size):
             continue
         segment_num = int(((end-start-window_size)/sliding_size))+1
         for i in range(segment_num):
-            segments_list.append([data_path+'/'+(interval[0].split('_'))[0]+'/'+interval[0]+'.edf', start, window_size])
+            segments_list.append([MakePath(interval[0],data_path), start, window_size])
             start += sliding_size
 
     return segments_list
@@ -264,9 +315,9 @@ def updateDataSet(type_1_len, type_2_len, type_3_len, portion, batch_size):
     type_3_sample_num = int(n*portion[2])
 
     # Sampling mask 생성
-    type_1_sampling_mask = sorted(np.random.choice(type_1_len, type_1_sample_num, replace=False))
-    type_2_sampling_mask = sorted(np.random.choice(type_2_len, type_2_sample_num, replace=False))
-    type_3_sampling_mask = sorted(np.random.choice(type_3_len, type_3_sample_num, replace=False))
+    type_1_sampling_mask = np.array(sorted(np.random.choice(type_1_len, type_1_sample_num, replace=False)))
+    type_2_sampling_mask = np.array(sorted(np.random.choice(type_2_len, type_2_sample_num, replace=False)))
+    type_3_sampling_mask = np.array(sorted(np.random.choice(type_3_len, type_3_sample_num, replace=False)))
 
     batch_num = int((type_1_sample_num+type_2_sample_num+type_3_sample_num)/batch_size)
     
@@ -274,7 +325,7 @@ def updateDataSet(type_1_len, type_2_len, type_3_len, portion, batch_size):
     type_2_batch_indexes = PreProcessing.GetBatchIndexes(type_2_sample_num, batch_num, 0)
     type_3_batch_indexes = PreProcessing.GetBatchIndexes(type_3_sample_num, batch_num, 0)
 
-    return [type_1_sampling_mask, type_1_batch_indexes, type_2_sampling_mask,  type_2_batch_indexes, type_3_sampling_mask, type_3_batch_indexes]
+    return [type_1_sampling_mask, type_1_batch_indexes, type_2_sampling_mask,  type_2_batch_indexes, type_3_sampling_mask, type_3_batch_indexes], batch_num
 
 
 ####    test code    ####

@@ -42,14 +42,14 @@ class FullModel_generator(Sequence):
     def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, data_type = 'snu'):
         
         self.ratio_type_1 = [5,4,3,2]
-        self.ratio_type_2 = [1,1,1,1]
+        self.ratio_type_2 = [0.05,0.05,0.05,0.05]
         self.ratio_type_3 = [5,6,7,8]
         self.batch_size = batch_size
         self.epoch = 0
         self.update_period = 10
-        self.type_1_data = type_1_data
-        self.type_2_data = type_2_data
-        self.type_3_data = type_3_data
+        self.type_1_data = np.array(type_1_data)
+        self.type_2_data = np.array(type_2_data)
+        self.type_3_data = np.array(type_3_data)
         self.type_1_len = len(type_1_data)
         self.type_2_len = len(type_2_data)
         self.type_3_len = len(type_3_data)
@@ -57,7 +57,7 @@ class FullModel_generator(Sequence):
 
         self.iden_mat = np.eye(2)
 
-        self.batch_set = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[0], self.ratio_type_2[0], self.ratio_type_3[0]])
+        self.batch_set, self.batch_num = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[0], self.ratio_type_2[0], self.ratio_type_3[0]], self.batch_size)
 
     def on_epoch_end(self):
         self.epoch += 1
@@ -66,15 +66,15 @@ class FullModel_generator(Sequence):
         else:
             self.ratio_idx = 3
 
-        self.batch_set = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[self.ratio_idx], self.ratio_type_2[self.ratio_idx], self.ratio_type_3[self.ratio_idx]])        
+        self.batch_set, self.batch_num = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[self.ratio_idx], self.ratio_type_2[self.ratio_idx], self.ratio_type_3[self.ratio_idx]], self.batch_size)        
     
     def __len__(self):
         return self.batch_num
     
     def __getitem__(self, idx):
-        x_batch_type_1 = Segments2Data(self.type_1_data[self.batch_set[0][self.batch_set[1]]],self.data_type)
-        x_batch_type_2 = Segments2Data(self.type_2_data[self.batch_set[2][self.batch_set[3]]],self.data_type)
-        x_batch_type_3 = Segments2Data(self.type_3_data[self.batch_set[4][self.batch_set[5]]],self.data_type)
+        x_batch_type_1 = Segments2Data(self.type_1_data[self.batch_set[0][self.batch_set[1][idx]]],self.data_type)
+        x_batch_type_2 = Segments2Data(self.type_2_data[self.batch_set[2][self.batch_set[3][idx]]],self.data_type)
+        x_batch_type_3 = Segments2Data(self.type_3_data[self.batch_set[4][self.batch_set[5][idx]]],self.data_type)
         x_batch = None
         if x_batch_type_1.ndim == 3:
             if np.all(x_batch== None):
@@ -243,7 +243,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                                                     histogram_freq = 1,
                                                     profile_batch = '100,200')
     
-    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_categorical_accuracy', 
+    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_binary_accuracy', 
                                                         verbose=0,
                                                         patience=10,
                                                         restore_best_weights=True)
