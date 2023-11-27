@@ -115,6 +115,7 @@ def MakeValidationIntervalSet(patient_specific_intervals):
     start_time = -1
     end_time = -1
     train_val_set = []
+    t3_period = 1800
 
     for idx, interval in enumerate(patient_specific_intervals):
         if interval[3] in true_state:
@@ -129,10 +130,11 @@ def MakeValidationIntervalSet(patient_specific_intervals):
                 state2find = 'interictal'
                 direction = 'backward'
                 done_flag = False
-                remain_period = 1800
+                remain_period = t3_period
                 intervals_copied = copy.deepcopy(patient_specific_intervals)
                 train_val_dict = {'train':[], 'val':[]}
                 interval_idx = start_idx
+                pre_inter_gap = 7200
 
                 while True:
                     interval_idx = FindStateIntervalIdx(intervals_copied, interval_idx, direction, state2find)
@@ -143,42 +145,57 @@ def MakeValidationIntervalSet(patient_specific_intervals):
                     if interval_idx  ==  -1:
                         if (state2find == 'interictal') and  (direction == 'backward'):
                             if remain_period <= 0:
-                                state2find = 'postictal'
-                                remain_period = 1800
+                                #state2find = 'postictal'
+                                # remain_period = t3_period
+                                # pre_inter_gap = 7200
+                                val_idx_list += list(range(start_idx, end_idx+1))
+                                break
                             direction = 'forward'
                             interval_idx = end_idx
                             continue
                         if (state2find == 'interictal') and (direction == 'forward'):
-                            state2find='postictal'
-                            remain_period = 1800
-                            continue
-                        if state2find  ==  'postictal':
+                            # state2find='postictal'
+                            # remain_period = t3_period
+                            # pre_inter_gap = 7200
+                            # continue
                             val_idx_list += list(range(start_idx, end_idx+1))
                             break
+                        # if state2find  ==  'postictal':
+                        #     val_idx_list += list(range(start_idx, end_idx+1))
+                        #     break
                     interictal_period = intervals_copied[interval_idx][2] - intervals_copied[interval_idx][1]
                     if remain_period - interictal_period > 0 :
-                        val_idx_list.append(interval_idx)
-                        remain_period -= interictal_period
-                        done_flag = False
+                        if pre_inter_gap <= 0 :
+                            val_idx_list.append(interval_idx)
+                            remain_period -= interictal_period
+                            done_flag = False
+                        else:
+                            pre_inter_gap -= interictal_period
                         continue
                     if remain_period - interictal_period  ==  0:
-                        val_idx_list.append(interval_idx)
-                        remain_period -= interictal_period
-                        done_flag = True
+                        if pre_inter_gap <= 0:
+                            val_idx_list.append(interval_idx)
+                            remain_period -= interictal_period
+                            done_flag = True
+                        else:
+                            pre_inter_gap -= interictal_period
                         continue
                     if remain_period - interictal_period < 0:
-                        temp = copy.deepcopy(intervals_copied[interval_idx])
-                        if direction == 'backward':
-                            temp[1] = intervals_copied[interval_idx][2] - remain_period
-                            train_val_dict['val'].append(temp)
-                            intervals_copied[interval_idx][2] = temp[1]
+                        if pre_inter_gap <= 0:
+                            temp = copy.deepcopy(intervals_copied[interval_idx])
+                            if direction == 'backward':
+                                temp[1] = intervals_copied[interval_idx][2] - remain_period
+                                train_val_dict['val'].append(temp)
+                                intervals_copied[interval_idx][2] = temp[1]
 
-                        elif direction == 'forward':
-                            temp[2] = intervals_copied[interval_idx][1] + remain_period
-                            train_val_dict['val'].append(temp)
-                            intervals_copied[interval_idx][1] = temp[2]
-                        done_flag = True
-                        remain_period -= interictal_period
+                            elif direction == 'forward':
+                                temp[2] = intervals_copied[interval_idx][1] + remain_period
+                                train_val_dict['val'].append(temp)
+                                intervals_copied[interval_idx][1] = temp[2]
+                            done_flag = True
+                            remain_period -= interictal_period
+                        else:
+                            pre_inter_gap -= interictal_period
                         continue
 
                 intervals_copied = np.array(intervals_copied)
@@ -279,7 +296,7 @@ def Segments2Data(segments, type='snu'):
         chn_num = len(channels)
 
         # UpSampling rate
-        target_sampling_rate = 128
+        target_sampling_rate = 256
 
         seg = []
         for i in range(len(interval_sets)):
@@ -288,11 +305,11 @@ def Segments2Data(segments, type='snu'):
         
         for channel in channels:
             ch_idx = labels.index(channel)
-            edf_signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*(read_end-read_start)))
+            signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*(read_end-read_start)))
             
-            # 128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
-            if not freq[ch_idx] == 128:
-                signal = resample(edf_signal, int(len(edf_signal) / freq[ch_idx] * target_sampling_rate ))
+            #128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
+            # if not freq[ch_idx] == 128:
+            #     signal = resample(signal, int(len(signal) / freq[ch_idx] * target_sampling_rate ))
             
             for j in range(len(interval_sets)):
                 seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
@@ -305,14 +322,23 @@ def Segments2Data(segments, type='snu'):
     
     del f
 
-    return np.array(signal_for_all_segments)/10
+    return np.array(signal_for_all_segments)/50
 
 def updateDataSet(type_1_len, type_2_len, type_3_len, portion, batch_size):
+    
     n = int(min(type_1_len/portion[0], type_2_len/portion[1], type_3_len/portion[2]))
+
+
 
     type_1_sample_num = int(n*portion[0])
     type_2_sample_num = int(n*portion[1])
     type_3_sample_num = int(n*portion[2])
+
+    if (type_1_sample_num+type_2_sample_num+type_3_sample_num) < batch_size :
+        type_1_sample_num += int(batch_size/2)
+        type_3_sample_num += int(batch_size/2)
+    
+    
 
     # Sampling mask 생성
     type_1_sampling_mask = np.array(sorted(np.random.choice(type_1_len, type_1_sample_num, replace=False)))
@@ -320,12 +346,23 @@ def updateDataSet(type_1_len, type_2_len, type_3_len, portion, batch_size):
     type_3_sampling_mask = np.array(sorted(np.random.choice(type_3_len, type_3_sample_num, replace=False)))
 
     batch_num = int((type_1_sample_num+type_2_sample_num+type_3_sample_num)/batch_size)
+
     
     type_1_batch_indexes = PreProcessing.GetBatchIndexes(type_1_sample_num, batch_num, 0)
     type_2_batch_indexes = PreProcessing.GetBatchIndexes(type_2_sample_num, batch_num, 0)
     type_3_batch_indexes = PreProcessing.GetBatchIndexes(type_3_sample_num, batch_num, 0)
 
     return [type_1_sampling_mask, type_1_batch_indexes, type_2_sampling_mask,  type_2_batch_indexes, type_3_sampling_mask, type_3_batch_indexes], batch_num
+
+def IntervalList2Dict(intervals):
+    interval_dict = {}
+    for interval in intervals:
+        if not interval[3] in interval_dict.keys():
+            interval_dict[interval[3]] = []
+        
+        interval_dict[interval[3]].append(interval)
+
+    return interval_dict
 
 
 ####    test code    ####

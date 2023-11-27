@@ -151,10 +151,10 @@ def train(model_name):
     # train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'] + train_segments_set['preictal_late'])
     # train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
 
-    train_type_1 = np.array(train_segments_set['preictal_ontime']  )
+    train_type_1 = np.array(train_segments_set['preictal_ontime'] + train_segments_set['preictal_late'] )
     train_type_2 = np.array(train_segments_set['ictal'] 
                             + train_segments_set['preictal_early'] 
-                            + train_segments_set['preictal_late'] )
+                            )
     train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
 
     fold_n = 5

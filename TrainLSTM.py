@@ -65,7 +65,7 @@ class FullModel_generator(Sequence):
             self.ratio_idx = int(self.epoch/self.update_period)
         else:
             self.ratio_idx = 3
-
+        self.ratio_idx = 0
         self.batch_set, self.batch_num = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[self.ratio_idx], self.ratio_type_2[self.ratio_idx], self.ratio_type_3[self.ratio_idx]], self.batch_size)        
     
     def __len__(self):

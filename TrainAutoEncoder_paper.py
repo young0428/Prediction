@@ -18,8 +18,9 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.utils import Sequence
 
 
-from readDataset import LoadDataset, Interval2Segments, Segments2Data
-import AutoEncoder
+import TestFullModel_specific
+from readDataset import *
+import AutoEncoder 
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
 import PreProcessing
@@ -36,69 +37,67 @@ if gpus:
 class autoencoder_generator(Sequence):
     def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, model_name, gen_type, data_type):
     
-        self.ratio_type_1 = [2,2,2,2]
-        self.ratio_type_2 = [2,2,2,2]
-        self.ratio_type_3 = [6,6,6,6]
-        
+        self.ratio_type_1 = [3,3,3,3]
+        self.ratio_type_2 = [3,3,3,3]
+        self.ratio_type_3 = [4,4,4,4]
         self.batch_size = batch_size
-        self.check = True
         self.epoch = 0
-        self.cnt = 0
-        self.update_period = 5*2
-        self.type_1_data = type_1_data
-        self.type_2_data = type_2_data
-        self.type_3_data = type_3_data
-        self.test_on = False
-        self.ratio_idx = 0
-        self.model_name = model_name
-        self.gen_type = gen_type
+        self.update_period = 20
+        self.type_1_data = np.array(type_1_data)
+        self.type_2_data = np.array(type_2_data)
+        self.type_3_data = np.array(type_3_data)
+        self.type_1_len = len(type_1_data)
+        self.type_2_len = len(type_2_data)
+        self.type_3_len = len(type_3_data)
         self.data_type = data_type
 
-        self.update_data()
+        self.iden_mat = np.eye(2)
+
+        self.batch_set, self.batch_num = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[0], self.ratio_type_2[0], self.ratio_type_3[0]], self.batch_size)
 
     def on_epoch_end(self):
         self.epoch += 1
-        self.update_data()
-        if self.gen_type == "train":
-            if self.epoch % 6 == 0:
-                try:
-                    test_ae(int(self.epoch/2), 5,2,128, self.model_name)
-                except:
-                    print("Fail to generate test fig")
-
-    def __len__(self):
-        return self.batch_num
-
-    def update_data(self):
-        # 데이터 밸런스를 위해 데이터 밸런스 조절 및 resampling
         if self.epoch/self.update_period < 4:
             self.ratio_idx = int(self.epoch/self.update_period)
         else:
             self.ratio_idx = 3
-        # ratio에 따라 데이터 갯수 정함
-        self.type_1_sampled_len = len(self.type_1_data)
-        self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_2[self.ratio_idx]),len(self.type_2_data))
-        self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_3[self.ratio_idx])
-        # Sampling mask 생성
-        self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
-        self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
+        self.ratio_idx = 0
+        self.batch_set, self.batch_num = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[self.ratio_idx], self.ratio_type_2[self.ratio_idx], self.ratio_type_3[self.ratio_idx]], self.batch_size)
 
-        self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
-        self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
-
-        self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
-        
-        self.type_1_batch_indexes = PreProcessing.GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
-        self.type_2_batch_indexes = PreProcessing.GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
-        self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
+    def __len__(self):
+        return self.batch_num
 
     def __getitem__(self, idx):
-        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
-                                    self.type_2_sampled[self.type_2_batch_indexes[idx]], 
-                                    self.type_3_sampled[self.type_3_batch_indexes[idx]]))
-        
-        x_batch = Segments2Data(input_seg, self.data_type)
-        x_batch = PreProcessing.FilteringSegments(x_batch)
+        x_batch_type_1 = Segments2Data(self.type_1_data[self.batch_set[0][self.batch_set[1][idx]]],self.data_type)
+        x_batch_type_2 = Segments2Data(self.type_2_data[self.batch_set[2][self.batch_set[3][idx]]],self.data_type)
+        x_batch_type_3 = Segments2Data(self.type_3_data[self.batch_set[4][self.batch_set[5][idx]]],self.data_type)
+        x_batch = None
+        if x_batch_type_1.ndim == 3:
+            if np.all(x_batch== None):
+                x_batch = x_batch_type_1
+            else:
+                x_batch = np.concatenate((x_batch, x_batch_type_1))
+            type_1_len = len(x_batch_type_1)
+        else:
+            type_1_len = 0
+
+        if x_batch_type_2.ndim == 3:
+            if np.all(x_batch== None):
+                x_batch = x_batch_type_2
+            else:
+                x_batch = np.concatenate((x_batch, x_batch_type_2))
+            type_2_len = len(x_batch_type_2)
+        else:
+            type_2_len = 0
+
+        if x_batch_type_3.ndim == 3:
+            if np.all(x_batch== None):
+                x_batch = x_batch_type_3
+            else:
+                x_batch = np.concatenate((x_batch, x_batch_type_3))
+            type_3_len = len(x_batch_type_3)
+        else:
+            type_3_len = 0
 
         return x_batch, x_batch
 
@@ -107,7 +106,7 @@ def train(model_name, type='snu'):
     window_size = 5
     overlap_sliding_size = 2
     normal_sliding_size = window_size
-    sr = 128
+    sr = 256
     check = [True]
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
@@ -124,8 +123,8 @@ def train(model_name, type='snu'):
 
             
         encoder_inputs = Input(shape=(21,sr*window_size,1))
-        encoder_outputs = AutoEncoder.FullChannelEncoder_paper_base(inputs = encoder_inputs)
-        decoder_outputs = AutoEncoder.FullChannelDecoder_paper_base(encoder_outputs)
+        encoder_outputs = AutoEncoder.FullChannelEncoder_for_CHB(inputs = encoder_inputs)
+        decoder_outputs = AutoEncoder.FullChannelDecoder_for_CHB(encoder_outputs)
         autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
         autoencoder_model.compile(optimizer = 'RMSprop', loss='mse')
         if os.path.exists(checkpoint_path):
@@ -161,10 +160,10 @@ def train(model_name, type='snu'):
     # edf_file_path = "D:/SNU_DATA"
 
 
-    train_interval_set = LoadDataset(train_info_file_path)
+    train_interval_set,_ = LoadDataset(train_info_file_path)
     train_segments_set = {}
 
-    test_interval_set = LoadDataset(test_info_file_path)
+    test_interval_set,_ = LoadDataset(test_info_file_path)
     test_segments_set = {}
 
     # 상대적으로 데이터 갯수가 적은 것들은 window_size 2초에 sliding_size 1초로 overlap 시켜 데이터 증강
@@ -225,7 +224,7 @@ def train(model_name, type='snu'):
     
     early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', 
                                                             verbose=1,
-                                                            patience=10,
+                                                            patience=5,
                                                             restore_best_weights=True)
     
     backup_callback = tf.keras.callbacks.BackupAndRestore(
