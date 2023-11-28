@@ -3,6 +3,7 @@ import natsort
 import pyedflib
 import pandas as pd
 import csv
+import numpy as np
 
 data_path = "E:/SNUH_START_END"
 
@@ -36,9 +37,18 @@ for patient in patient_folder_list:
 
 SOP = 30
 SPH = 2
+interictal_gap = 10800 # sec
+early_gap = 3600
+ontime_gap = 60*(SOP+SPH)
+late_gap = 60*SPH
+num_to_state_dict={0:'None', 1:'ictal', 2:'preictal_early', 3:'preictal_ontime', 4:'preictal_late', 5:'interictal'}
+
 for info in total_seizure_info_list:
 	info['ictal'].sort(key= (lambda x:x[0]) )	# 시작 시간 순서대로 정렬
 	seizure_time_set = info['ictal']
+	seizure_time_flag = np.array([5]*info['endtime'])
+	# 1 == seizure, 4 == preictal_late, 3 == preictal_ontime, 2 == preictal_early, 5==interictal
+	
 	interictal_list = []
 	preictal_1hour_list = []
 	preictal_list = []
@@ -47,133 +57,62 @@ for info in total_seizure_info_list:
 	for i in range(len(seizure_time_set)):
 		seizure_start_time = seizure_time_set[i][0]
 		seizure_end_time = seizure_time_set[i][1]
-		# 현재 시간 기준으로 inter-ictal 추출
-		### inter-ictal ###
-		if i == 0:
-            # ictal 1시간 전이 0보다 작으면 ictal 앞부분에는 interictal 없음
-			if not seizure_start_time - 3600 < 0:      
-				interictal_list.append([0,seizure_start_time-3600])
-		else:
-			if not seizure_start_time - 3600 < seizure_time_set[i-1][1]+7200 : # Ictal - 1h 가 그 전 Ictal이 끝나고 PostIctal 구간일 때 제외
-				# ictal이 지나고 2시간 뒤부터 현재 ictal 1시간 전까지
-				interictal_list.append([seizure_time_set[i-1][1]+7200, seizure_start_time-3600])
-		if i == len(seizure_time_set)-1:	# 마지막 seizure일 경우 endtime 사이에서의 interictal 계산산
-			if not seizure_end_time + 7200 > info['endtime']:
-				interictal_list.append([ seizure_end_time+7200, info['endtime'] ]) 
-
-		###  pre-ictal 1-hour  ###
 		
-		# 첫 ictal일 경우 preictal_1hour(32min ~ 60min) 시간 계산 시 0보다 작은 값 나오지 않도록 처리리
-		if i == 0:
-			# seizure_start_time - (SOP+SPH)*60  < 0 인 경우 preictal-1hour 없음
-			if not seizure_start_time - (SOP+SPH)*60 < 0: # (SOP+SPH)*60 = 1920   
-				preictal_1hour_end = seizure_start_time - (SOP+SPH)*60
-				if seizure_start_time - 3600 < 0: # 계산된 (ictal - 1hour) preictal-1hour의 시작시간이 0보다 작으면 시작시간 0으로
-					preictal_1hour_start = 0
-				else:
-					preictal_1hour_start = seizure_start_time - 3600 # 아닐 경우 ictal - 1hour 로 시작시간 설정정
-				
-				preictal_1hour_list.append( [preictal_1hour_start, preictal_1hour_end] )
-		else:
-			# postictal이 끝나는 시간이 전의 seizure_endtime보다 늦을경우 preictal-1hour 없음
-			if not seizure_time_set[i-1][1] >  seizure_start_time - (SOP+SPH)*60:
-				preictal_1hour_end = seizure_start_time - (SOP+SPH)*60
-				if seizure_start_time - 3600 < seizure_time_set[i-1][1]:
-					# seizure_end_time이 끝나는 시간이 preictal-1hour 구간 사이에 걸쳐있을 경우 postictal이 끝나는 시점을 preictal-1hour 구간의 시작으로 설정
-					preictal_1hour_start = seizure_time_set[i-1][1]
-				else:
-					preictal_1hour_start = seizure_start_time - 3600
-				
-				preictal_1hour_list.append( [preictal_1hour_start, preictal_1hour_end] )
 
-		###  SOP + SPH (preictal)  ###
-		if i == 0:
-			# ictal 시작시간 - SPH(2분)가 0보다 작을 경우 preictal 없음
-			if not seizure_start_time - SPH * 60 < 0 :
-				preictal_end = seizure_start_time - SPH * 60
-				# preictal의 시작시간이 0보다 작지 않도록 예외 처리
-				if seizure_start_time - (SOP + SPH)*60 < 0: 
-					preictal_start = 0
-				else:
-					preictal_start = seizure_start_time - (SOP + SPH)*60 
-				
-				preictal_list.append( [preictal_start, preictal_end] )
+		# interictal이 될 수 없는 부분 0으로 초기화
+		# interictal == 5
+
+		# seizure 시작 전 3시간 0으로 초기화
+		if not seizure_start_time - interictal_gap < 0:
+			seizure_time_flag[seizure_start_time - interictal_gap :seizure_start_time] = 0
 		else:
-			# 이전 seizure시작시간 - SPH(2 min)이 이전 seizure가 끝나기 전이면 스킵
-			if not seizure_time_set[i-1][1] >  seizure_start_time - SPH*60:
-				preictal_end = seizure_start_time - SPH*60
-				if seizure_start_time - (SOP + SPH)*60 < seizure_time_set[i-1][1]:
-					preictal_start = seizure_time_set[i-1][1]
-				else:
-					preictal_start = seizure_start_time - (SOP + SPH)*60
-				
-				preictal_list.append( [preictal_start, preictal_end] )
+			seizure_time_flag[0:seizure_start_time] = 0
+		# seizure 끝난 후 3시간 0으로 초기화
+		if not seizure_end_time + interictal_gap >= info['endtime']:
+			seizure_time_flag[seizure_end_time : seizure_end_time + interictal_gap] = 0
+		else:
+			seizure_time_flag[seizure_end_time : info['endtime']] = 0
+
+		## 밑으로 갈수록 우선순위 높음
+		## 덮어씌워짐
+
+		# preictal_early 부분 2로 만듦
+		if not seizure_start_time - early_gap < 0 :
+			seizure_time_flag[seizure_start_time - early_gap : seizure_start_time] = 2
+		else:
+			seizure_time_flag[0 : seizure_start_time] = 2
 		
-		if i == 0:
-			if seizure_start_time - SPH * 60 < 0:
-				preictal_late_start = 0
-			else:
-				preictal_late_start = seizure_start_time - SPH*60
-			preictal_late_end = seizure_end_time
-			preictal_late_list.append( [preictal_late_start, preictal_late_end] )
+		# preictal_ontime 부분 3으로 만듦
+		if not seizure_start_time - ontime_gap < 0:
+			seizure_time_flag[seizure_start_time - ontime_gap : seizure_start_time] = 3
 		else:
-			if seizure_start_time - SPH * 60 < seizure_time_set[i-1][1]:
-				preictal_late_start = seizure_time_set[i-1][1]
-			else:
-				preictal_late_start = seizure_start_time - SPH*60
-			preictal_late_end = seizure_end_time
-			preictal_late_list.append( [preictal_late_start, preictal_late_end] )
+			seizure_time_flag[0 : seizure_start_time] = 3
 
-
-
-
-		### Post ictal ###
-		if i == len(seizure_time_set)-1:
-			postictal_start = seizure_end_time
-			if seizure_end_time + 7200 > info['endtime']:
-				postictal_end = info['endtime']
-			else:
-				postictal_end = seizure_end_time + 7200
-			
-			post_ictal_list.append( [postictal_start, postictal_end] )
-			
+		# preictal_late 부분 4으로 만듦
+		if not seizure_start_time - late_gap < 0 :
+			seizure_time_flag[seizure_start_time - late_gap : seizure_start_time] = 4
 		else:
-			if not seizure_time_set[i+1][0]-3600 < seizure_end_time :
-				postictal_start = seizure_end_time
-				if seizure_time_set[i+1][0]-3600 < seizure_end_time + 7200:
-					postictal_end = seizure_time_set[i+1][0]-3600
-				else:
-					postictal_end = seizure_end_time + 7200
-				post_ictal_list.append( [postictal_start, postictal_end] )
+			seizure_time_flag[0 : seizure_start_time] = 4
 
-				
-	info['ictal'] = seizure_time_set
-	
-	if interictal_list: # interictal 리스트가 비어있지 않으면
-		info['interictal'] = interictal_list
-	else:
-		info['interictal'] = None
+		
+		seizure_time_flag[seizure_start_time:seizure_end_time] = 1
 
-	if preictal_1hour_list: # preictal-1hour리스트가 비어있지 않으면
-		info['preictal_early'] = preictal_1hour_list
-	else:
-		info['preictal_early'] = None
-	
-	if preictal_list: # preictal 리스트가 비어있지 않으면
-		info['preictal_ontime'] = preictal_list
-	else:
-		info['preictal_ontime'] = None
-	
-	if preictal_late_list:
-		info['preictal_late'] = preictal_late_list
-	else:
-		info['preictal_late'] = None
-	
-	if post_ictal_list: # postictal 리스트가 비어있지 않으면
-		info['postictal'] = post_ictal_list
-	else:
-		info['postictal'] = None
+		
+	state = -1
+	for i in range(6):
+		info[num_to_state_dict[i]] = None
 
+	for i in range(len(seizure_time_flag)):
+		if seizure_time_flag[i] != state or i+1 == info['endtime']:
+			if state != -1:
+				if info[num_to_state_dict[state]] == None:
+					info[num_to_state_dict[state]] = []
+				info[num_to_state_dict[state]].append([start_sec, i])
+				start_sec = i
+				state = seizure_time_flag[i]
+			else:
+				start_sec = 0
+				state = seizure_time_flag[0]
 
 patient_segments_list = []
 for patient in total_seizure_info_list:
@@ -181,10 +120,10 @@ for patient in total_seizure_info_list:
 	patient_name_snu = "SNU%03d"%patient_number
 	dict_keys = list(patient.keys())
 	for i in range(len(dict_keys)):
-		if dict_keys[i] == 'name' or dict_keys[i] == 'endtime':
+		if dict_keys[i] == 'name' or dict_keys[i] == 'endtime' or dict_keys[i] == "None":
 			continue
 		time_list = patient[dict_keys[i]]
-		if not time_list==None:
+		if not time_list==None :
 			for time in time_list:
 				patient_segments_list.append([patient_name_snu, time[0], time[1], dict_keys[i]])
 
