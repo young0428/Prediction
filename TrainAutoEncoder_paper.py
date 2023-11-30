@@ -26,6 +26,7 @@ from sklearn.model_selection import KFold
 import PreProcessing
 from TestAutoEncoder import test_ae
 
+tf.get_logger().setLevel('ERROR')
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
   try:
@@ -38,7 +39,7 @@ class autoencoder_generator(Sequence):
     def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, model_name, gen_type, data_type):
     
         self.ratio_type_1 = [3,3,3,3]
-        self.ratio_type_2 = [3,3,3,3]
+        self.ratio_type_2 = [0.1,0.1,0.1,0.1]
         self.ratio_type_3 = [4,4,4,4]
         self.batch_size = batch_size
         self.epoch = 0
@@ -98,15 +99,15 @@ class autoencoder_generator(Sequence):
             type_3_len = len(x_batch_type_3)
         else:
             type_3_len = 0
-
+        
         return x_batch, x_batch
 
 # %%
 def train(model_name, type='snu'):
     window_size = 5
-    overlap_sliding_size = 2
+    overlap_sliding_size = 5
     normal_sliding_size = window_size
-    sr = 256
+    sr = 128
     check = [True]
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
@@ -123,8 +124,8 @@ def train(model_name, type='snu'):
 
             
         encoder_inputs = Input(shape=(21,sr*window_size,1))
-        encoder_outputs = AutoEncoder.FullChannelEncoder_for_CHB(inputs = encoder_inputs)
-        decoder_outputs = AutoEncoder.FullChannelDecoder_for_CHB(encoder_outputs)
+        encoder_outputs = AutoEncoder.FullChannelEncoder(inputs = encoder_inputs)
+        decoder_outputs = AutoEncoder.FullChannelDecoder(encoder_outputs, freq=sr, window_size=window_size)
         autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
         autoencoder_model.compile(optimizer = 'RMSprop', loss='mse')
         if os.path.exists(checkpoint_path):

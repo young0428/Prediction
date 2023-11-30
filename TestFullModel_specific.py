@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pickle
 import os
 import seaborn as sns
+from readDataset import *
 
 import tensorflow as tf
 from tensorflow.keras.layers import Input
@@ -35,9 +36,9 @@ class ValidatonTestData :
         self.interval_sets = interval_sets
         self.which_data = which_data
         self.full_signal = []
-        self.target_sr = 256
+        self.target_sr = 128
         self.duration = 0
-        self.alarm_interval = 25
+        self.alarm_interval = 10
         self.cat_num = 2
         self.matrix = np.zeros(shape=(self.cat_num, self.cat_num))
         self.tf_matrix = np.zeros(shape=(2,2))
@@ -71,7 +72,7 @@ class ValidatonTestData :
         return patient_name_list
 
     def IntervalSorting(self, interval_sets):
-        state_list = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
+        state_list = ['preictal_ontime', 'ictal', 'preictal_late','interictal']
         self.state_dict = {'preictal_ontime':1, 'ictal':0, 'preictal_late':1, 'preictal_early':0, 'postictal':0,'interictal':0}
         temp = []
         self.intervals_state = []
@@ -154,6 +155,7 @@ class ValidatonTestData :
                 self.results.append([segment[0], float(segment[1]) + j*self.sliding_size,self.window_size, segment[3]])
     # 생성된 배칭에 대해 예측 수행
     def Predict(self):
+        
         self.batch_x = np.expand_dims(self.batch_x,axis=-1)
         self.predict = self.model.predict_on_batch(self.batch_x)
         self.pred_cat = ((tf.squeeze(tf.round(self.predict))).numpy()).astype(int).tolist()
@@ -211,6 +213,12 @@ class ValidatonTestData :
         return self.edf_file_path+'/'+(patient_name.split('_'))[0]+'/'+patient_name+'.edf'
 
 #%%
+lstm_model_name = "patient_specific_chb_DCAE_LSTM_inter_gap_7200"
+patient_name = "SNU003"
+idx = 0
+checkpoint_path = f"./LSTM/{lstm_model_name}/{patient_name}/set{idx+1}/cp.ckpt"
+interval_sets = [['SNU003', 33795, 35595, 'interictal'], ['SNU003', 4111, 5791, 'preictal_early'], ['SNU003', 5791, 7591, 'preictal_ontime'], ['SNU003', 7591, 7711, 'preictal_late'], ['SNU003', 7711, 7727, 'ictal']]
+interval_sets = IntervalList2Dict(interval_sets)
 def validation(checkpoint_path, test_interval_set, data_type,k,n):
     window_size = 5
     overlap_sliding_size = 1
@@ -224,14 +232,14 @@ def validation(checkpoint_path, test_interval_set, data_type,k,n):
     if data_type == 'snu':
         # test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
         # edf_file_path = "/host/d/SNU_DATA"
-        test_info_file_path = "/home/SNU_DATA/patient_info_snu_test.csv"
-        edf_file_path = "/home/SNU_DATA"
+        test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
+        edf_file_path = "/host/d/SNU_DATA"
     else:
         # test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
         # edf_file_path = "/host/d/CHB"
 
         test_info_file_path = "/home/CHB/patient_info_chb_test.csv"
-        edf_file_path = "/home/CHB"
+        edf_file_path = "/host/d/CHB"
 
 
 
@@ -244,6 +252,7 @@ def validation(checkpoint_path, test_interval_set, data_type,k,n):
     sens,fpr = val_object.Calc()
     return val_object.matrix, val_object.tf_matrix, sens, fpr, val_object.seg_res
 
+#validation(checkpoint_path, interval_sets, "snu",5,3)
 
 def SaveAsHeatmap(matrix, path):
     sns.heatmap(matrix,annot=True, cmap='Blues')
@@ -251,6 +260,7 @@ def SaveAsHeatmap(matrix, path):
     plt.ylabel('True')
     plt.savefig(path)
     plt.clf()
+
 
 
     

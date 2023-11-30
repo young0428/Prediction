@@ -164,38 +164,30 @@ def MakeValidationIntervalSet(patient_specific_intervals):
                         #     val_idx_list += list(range(start_idx, end_idx+1))
                         #     break
                     interictal_period = intervals_copied[interval_idx][2] - intervals_copied[interval_idx][1]
-                    if remain_period - interictal_period > 0 :
-                        if pre_inter_gap <= 0 :
-                            val_idx_list.append(interval_idx)
-                            remain_period -= interictal_period
-                            done_flag = False
-                        else:
-                            pre_inter_gap -= interictal_period
+                    if remain_period - interictal_period > 0 : 
+                        val_idx_list.append(interval_idx)
+                        remain_period -= interictal_period
+                        done_flag = False
                         continue
                     if remain_period - interictal_period  ==  0:
-                        if pre_inter_gap <= 0:
-                            val_idx_list.append(interval_idx)
-                            remain_period -= interictal_period
-                            done_flag = True
-                        else:
-                            pre_inter_gap -= interictal_period
+                        val_idx_list.append(interval_idx)
+                        remain_period -= interictal_period
+                        done_flag = True
                         continue
                     if remain_period - interictal_period < 0:
-                        if pre_inter_gap <= 0:
-                            temp = copy.deepcopy(intervals_copied[interval_idx])
-                            if direction == 'backward':
-                                temp[1] = intervals_copied[interval_idx][2] - remain_period
-                                train_val_dict['val'].append(temp)
-                                intervals_copied[interval_idx][2] = temp[1]
+                        temp = copy.deepcopy(intervals_copied[interval_idx])
+                        if direction == 'backward':
+                            temp[1] = intervals_copied[interval_idx][2] - remain_period
+                            train_val_dict['val'].append(temp)
+                            intervals_copied[interval_idx][2] = temp[1]
 
-                            elif direction == 'forward':
-                                temp[2] = intervals_copied[interval_idx][1] + remain_period
-                                train_val_dict['val'].append(temp)
-                                intervals_copied[interval_idx][1] = temp[2]
-                            done_flag = True
-                            remain_period -= interictal_period
-                        else:
-                            pre_inter_gap -= interictal_period
+                        elif direction == 'forward':
+                            temp[2] = intervals_copied[interval_idx][1] + remain_period
+                            train_val_dict['val'].append(temp)
+                            intervals_copied[interval_idx][1] = temp[2]
+                        done_flag = True
+                        remain_period -= interictal_period
+
                         continue
 
                 intervals_copied = np.array(intervals_copied)
@@ -296,7 +288,7 @@ def Segments2Data(segments, type='snu'):
         chn_num = len(channels)
 
         # UpSampling rate
-        target_sampling_rate = 256
+        target_sampling_rate = 200
 
         seg = []
         for i in range(len(interval_sets)):
@@ -308,8 +300,8 @@ def Segments2Data(segments, type='snu'):
             signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*(read_end-read_start)))
             
             #128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
-            # if not freq[ch_idx] == 128:
-            #     signal = resample(signal, int(len(signal) / freq[ch_idx] * target_sampling_rate ))
+            if not freq[ch_idx] == target_sampling_rate:
+                signal = resample(signal, int(len(signal) / freq[ch_idx] * target_sampling_rate ))
             
             for j in range(len(interval_sets)):
                 seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
@@ -327,7 +319,6 @@ def Segments2Data(segments, type='snu'):
 def updateDataSet(type_1_len, type_2_len, type_3_len, portion, batch_size):
     
     n = int(min(type_1_len/portion[0], type_2_len/portion[1], type_3_len/portion[2]))
-
 
 
     type_1_sample_num = int(n*portion[0])

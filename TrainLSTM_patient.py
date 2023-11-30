@@ -42,9 +42,9 @@ if gpus:
 class FullModel_generator(Sequence):
     def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, data_type = 'snu', gen_type = 'train'):
         
-        self.ratio_type_1 = [5]*4
+        self.ratio_type_1 = [200]*4
         self.ratio_type_2 = [1]*4
-        self.ratio_type_3 = [5]*4
+        self.ratio_type_3 = [200]*4
         self.batch_size = batch_size
         self.epoch = 0
         self.update_period = 20
@@ -58,9 +58,9 @@ class FullModel_generator(Sequence):
 
         self.iden_mat = np.eye(2)
         if gen_type == 'val':
-            self.batch_size = 50
+            self.batch_size = 20
         self.batch_set, self.batch_num = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[0], self.ratio_type_2[0], self.ratio_type_3[0]], self.batch_size)
-
+        
     def on_epoch_end(self):
         self.epoch += 1
         if self.epoch/self.update_period < 4:
@@ -74,13 +74,29 @@ class FullModel_generator(Sequence):
         return self.batch_num
     
     def __getitem__(self, idx):
-        batch_concat = np.concatenate((self.type_1_data[self.batch_set[0][self.batch_set[1][idx]]],
-                                       self.type_2_data[self.batch_set[2][self.batch_set[3][idx]]],
-                                       self.type_3_data[self.batch_set[4][self.batch_set[5][idx]]]))
+        batch_concat = None
+        if len(self.batch_set[1][idx]) == 0:
+            type_1_seg = []
+        else:
+            type_1_seg = self.type_1_data[self.batch_set[0][self.batch_set[1][idx]]]
+            batch_concat = type_1_seg
+  
+        if len(self.batch_set[3][idx]) == 0:
+            type_2_seg = []
+        else:
+            type_2_seg = self.type_2_data[self.batch_set[2][self.batch_set[3][idx]]]
+            batch_concat = np.concatenate((batch_concat, type_2_seg))
+        if len(self.batch_set[5][idx]) == 0:
+            type_3_seg = []
+        else:
+            type_3_seg = self.type_3_data[self.batch_set[4][self.batch_set[5][idx]]]
+            batch_concat = np.concatenate((batch_concat, type_3_seg))
+            
         x_batch = Segments2Data(batch_concat, self.data_type)
-        type_1_len = len(self.type_1_data[self.batch_set[0][self.batch_set[1][idx]]])
-        type_2_len = len(self.type_2_data[self.batch_set[2][self.batch_set[3][idx]]])
-        type_3_len = len(self.type_3_data[self.batch_set[4][self.batch_set[5][idx]]])
+        
+        type_1_len = len(type_1_seg)
+        type_2_len = len(type_2_seg)
+        type_3_len = len(type_3_seg)
         # x_batch_type_1 = Segments2Data(self.type_1_data[self.batch_set[0][self.batch_set[1][idx]]],self.data_type)
         # x_batch_type_2 = Segments2Data(self.type_2_data[self.batch_set[2][self.batch_set[3][idx]]],self.data_type)
         # x_batch_type_3 = Segments2Data(self.type_3_data[self.batch_set[4][self.batch_set[5][idx]]],self.data_type)
@@ -123,11 +139,11 @@ class FullModel_generator(Sequence):
 
 def train(model_name, encoder_model_name, data_type = 'snu'):
     window_size = 5
-    overlap_sliding_size = 5
+    overlap_sliding_size = 2
     normal_sliding_size = window_size
-    sr = 256
+    sr = 128
     epochs = 100
-    batch_size = 500
+    batch_size = 200
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
@@ -137,9 +153,9 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
         # test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
         # edf_file_path = "/host/d/SNU_DATA"
 
-        train_info_file_path = "/home/SNU_DATA/patient_info_snu_train.csv"
-        test_info_file_path = "/home/SNU_DATA/patient_info_snu_test.csv"
-        edf_file_path = "/home/SNU_DATA"
+        train_info_file_path = "/host/d/SNU_DATA/patient_info_snu_train.csv"
+        test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
+        edf_file_path = "/host/d/SNU_DATA"
 
         checkpoint_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
         checkpoint_dir = os.path.dirname(checkpoint_path)
@@ -148,8 +164,8 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
 
             
         encoder_inputs = Input(shape=(21,int(sr*window_size),1))
-        encoder_outputs = AutoEncoder.FullChannelEncoder_paper_base(inputs = encoder_inputs)
-        decoder_outputs = AutoEncoder.FullChannelDecoder_paper_base(encoder_outputs)
+        encoder_outputs = AutoEncoder.FullChannelEncoder(inputs = encoder_inputs)
+        decoder_outputs = AutoEncoder.FullChannelDecoder(encoder_outputs, freq=sr, window_size=window_size)
         autoencoder_model = Model(inputs=encoder_inputs, outputs=decoder_outputs)
         autoencoder_model.load_weights(autoencoder_model_path)
 
@@ -165,9 +181,9 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
         # test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
         # edf_file_path = "/host/d/CHB"
 
-        train_info_file_path = "/home/CHB/patient_info_chb_train.csv"
-        test_info_file_path = "/home/CHB/patient_info_chb_test.csv"
-        edf_file_path = "/home/CHB"
+        train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
+        test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
+        edf_file_path = "/host/d/CHB"
 
         checkpoint_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
         checkpoint_dir = os.path.dirname(checkpoint_path)
@@ -192,7 +208,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
     val_segments_set = {}
 
     # %%
-    channel_filtered_intervals = FilteringByChannel(train_interval_overall, edf_file_path, 'chb')
+    channel_filtered_intervals = FilteringByChannel(train_interval_overall, edf_file_path, data_type)
     interval_dict_key_patient_name = Interval2NameKeyDict(channel_filtered_intervals)
     filtered_interval_dict, ictal_num = FilterValidatePatient(interval_dict_key_patient_name)
     for patient_name in filtered_interval_dict.keys() :
@@ -214,7 +230,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
             train_intervals = IntervalList2Dict(set['train'])
             val_intervals = IntervalList2Dict(set['val'])
         # 상대적으로 데이터 갯수가 적은 것들은 window_size 2초에 sliding_size 1초로 overlap 시켜 데이터 증강
-            for state in ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early']:
+            for state in ['preictal_ontime', 'ictal', 'preictal_late']:
                 if state in train_intervals.keys():
                     train_segments_set[state] = Interval2Segments(train_intervals[state],edf_file_path, window_size, overlap_sliding_size)
                 else:
@@ -225,7 +241,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                 else:
                     val_segments_set[state] = []
                 
-            for state in ['postictal', 'interictal']:
+            for state in ['interictal']:
                 if state in train_intervals.keys():
                     train_segments_set[state] = Interval2Segments(train_intervals[state],edf_file_path, window_size, normal_sliding_size)
                 else:
@@ -237,14 +253,14 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                     val_segments_set[state] = []
 
             train_type_1 = np.array(train_segments_set['preictal_ontime']+ train_segments_set['preictal_late'] )
-            train_type_2 = np.array(train_segments_set['ictal'] + train_segments_set['preictal_early'])
-            train_type_3 = np.array(train_segments_set['postictal'] + train_segments_set['interictal'])
+            train_type_2 = np.array(train_segments_set['ictal'])
+            train_type_3 = np.array(train_segments_set['interictal'])
 
             val_type_1 = np.array(val_segments_set['preictal_ontime']+ val_segments_set['preictal_late'] )
-            val_type_2 = np.array(val_segments_set['ictal'] + val_segments_set['preictal_early'] )
-            val_type_3 = np.array(val_segments_set['postictal'] + val_segments_set['interictal'])
+            val_type_2 = np.array(val_segments_set['ictal'] )
+            val_type_3 = np.array(val_segments_set['interictal'])
             
-            lstm_output = LSTMLayer(encoder_output, 10)
+            lstm_output = LSTMLayer(encoder_output, 20)
             full_model = Model(inputs=encoder_inputs, outputs=lstm_output)
 
             checkpoint_path = f"./LSTM/{model_name}/{patient_name}/set{idx+1}/cp.ckpt"
