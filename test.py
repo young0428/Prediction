@@ -1,91 +1,29 @@
-#%%
-from readDataset import *
-import os
-import pickle
 import numpy as np
-import sys
-import numpy as np
-import random
-import operator
-import matplotlib.pyplot as plt
-import pickle
-import copy
-import pywt
-from scipy import signal
-from vit_tensorflow.mobile_vit import MobileViT
-model_name = "patient_specific_chb_DCAE_LSTM_inter_gap_7200"
-patient_name = "CHB001"
+import tensorflow as tf
+a = 4
+b = 4
+c = 4
+y = [[[1,1,1],[2,2,2],[3,3,3],[4,4,4]]] + [[[5,5,5],[6,6,6],[7,7,7],[8,8,8]]] + [[[9,9,9],[10,10,10],[11,11,11],[12,12,12]]] + [[[13,13,13],[14,14,14],[15,15,15],[16,16,16]]]
+tmp2 = []
+for a1 in range(6):
+    tmp1 = []
+    for a2 in range(4):
+        tmp1.append([a1*4+a2+1]*3)
+    tmp2.append(tmp1)
 
-# matrix, postprocessed_matrix, sens, fpr, seg_results
-# seg_results = [filename, start, duration, string_state, true_label, predicted_label]
+y = np.array(tmp2)
+y.shape = (1,6,4,3)
 
-#%%
-test_segment = ['/host/d/CHB/CHB001/CHB001_06.edf', 1000, 8]
-test_data = Segments2Data([test_segment],'chb')
-test_data = np.squeeze(test_data)
-ch1_data = test_data[3]
-sampling_rate = 256
-
-plt.figure(figsize=(16,4))
-freqs = np.linspace(100,0.1,128) / sampling_rate
-scale = pywt.frequency2scale('cgau8',freqs) 
-cwtmatr, freq= pywt.cwt(ch1_data, wavelet='cgau8', scales = scale)
-cwt_image = np.abs(cwtmatr)
-
-cwt_image = np.expand_dims(cwt_image,axis=-1)
-
-cwt_image = np.expand_dims(cwt_image,axis=0)
-
-test_segment = ['/host/d/CHB/CHB001/CHB001_05.edf', 1000, 8]
-test_data = Segments2Data([test_segment],'chb')
-test_data = np.squeeze(test_data)
-ch1_data = test_data[3]
-sampling_rate = 256
-
-plt.figure(figsize=(16,4))
-freqs = np.linspace(100,0.1,128) / sampling_rate
-scale = pywt.frequency2scale('cgau8',freqs) 
-cwtmatr, freq= pywt.cwt(ch1_data, wavelet='cgau8', scales = scale)
-cwt_image2 = np.abs(cwtmatr)
-
-cwt_image2 = np.expand_dims(cwt_image2,axis=-1)
-
-cwt_image2 = np.expand_dims(cwt_image2,axis=0)
-
-
-
-print(np.shape(cwt_image))
-
-mbvit_xs = MobileViT(
-    image_size = (128, 1600),
-    # (64 , 800), (32, 400), (16, 200)
-    patch_size=(8,25),
-    dims = [96, 120, 144],
-    channels = [16, 32, 48, 48, 64, 64, 80, 80],
-    num_classes = 1000
+patches = tf.image.extract_patches(
+    images = y,
+    sizes = [1, 2,2,1],
+    strides=[1,2,2,1],
+    rates=[1,1,1,1],
+    padding='VALID'
 )
-
-pred = mbvit_xs(cwt_image)
-print(np.shape(pred))
-
-
-
-
-
-
-
-
-
-    
-#print("Sens", sens_sum/7)
-#print("FPR ", fpr_sum/7)
-
-
-# def SaveAsHeatmap(matrix, path):
-#     sns.heatmap(matrix,annot=True, cmap='Blues')
-#     plt.xlabel('Predict')
-#     plt.ylabel('True')
-#     plt.savefig(path)
-#     plt.clf()
-
-# %%
+print(y[0,:,:,0])
+reshaped = tf.reshape(patches,shape=(1,4,6,3))
+print(reshaped[0,:,0,0])
+reshaped = tf.transpose(reshaped, [0,2,1,3])
+print(reshaped[0,:,0,0])
+print(patches)

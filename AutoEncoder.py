@@ -126,30 +126,68 @@ def FullChannelEncoder_for_CHB(inputs):
 
 	return x
 
-def FullChannelDecoder_for_CHB(inputs):
-	# (None, 77, 64)
-	x = Reshape((1,inputs.shape[1],inputs.shape[2]))(inputs)
-	
-	x = Conv2DTranspose(filters=32,kernel_size=(2,3), padding='valid')(x)# (None, 2, 79, 64)
-	x = BatchNormalization()(x)
-	x = UpSampling2D(size=(2,2))(x)								# (None, 4, 158, 128)
-	x = LeakyReLU()(x)															
-	
+def OneChannelEncoder(inputs):
+	# (None, 1, 1000, 1)
+	x = tf.keras.layers.Normalization()(inputs)
 
-	x = Conv2DTranspose(filters=32,kernel_size=(1,2),padding='valid')(x)		# (None, 4, 159, 128)
-	x = BatchNormalization()(x)
-	x = UpSampling2D(size=(2,2))(x)												# (None, 8, 318, 128)
-	x = LeakyReLU()(x)
+	x = Conv2D(filters=32, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 1000, 32)
+	x = BatchNormalization()(x)																# output shape = (None, 1, 1000, 32)
+	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 500, 32)
 
-	x = Conv2DTranspose(filters=32,kernel_size=(2,3),padding='valid')(x)		# (None, 9, 320, 64)
-	x = BatchNormalization()(x)
-	x = UpSampling2D(size=(2,2))(x)												# (None, 18,640, 32)
-	x = LeakyReLU()(x)
+	x = Conv2D(filters=64, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 500, 64)
+	x = BatchNormalization()(x)																# output shape = (None, 1, 500, 64)
+	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 250, 64)
+
+	x = Conv2D(filters=128, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 500, 64)
+	x = BatchNormalization()(x)																# output shape = (None, 1, 500, 64)
+	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 250, 64)
+
+	outputs = tf.squeeze(x, name="encoder_last")
+
+	return outputs
+
+
+def OneChannelEncoder(inputs):
 	
-	x = Conv2DTranspose(filters=1,kernel_size=(2,3),padding='same')(x) # (None, 18, 640, 1)
-	decoder_output = tf.squeeze(x, axis = -1)
+	x = tf.keras.layers.Normalization()(inputs)												# output shape = (None, 1, 1000, 1)
 
-	return decoder_output
+	x = Conv2D(filters=32, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 1000, 32)
+	x = BatchNormalization()(x)																# output shape = (None, 1, 1000, 32)
+	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 500, 32)
+
+	x = Conv2D(filters=64, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 500, 64)
+	x = BatchNormalization()(x)																# output shape = (None, 1, 500, 64)
+	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 250, 64)
+
+	x = Conv2D(filters=16, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 250, 16)
+	x = BatchNormalization()(x)																# output shape = (None, 1, 250, 16)
+	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 125, 16)
+
+	outputs = tf.squeeze(x, name="encoder_last")											# output shape = (None, 125, 16)
+
+	return outputs
+
+def OneChannelDecoder(inputs):
+
+	x = tf.expand_dims(inputs, axis = 1)															# output shape = (None, 1, 125, 16)
+
+	x = UpSampling2D((1,2))(x)																		# output shape = (None, 1, 250, 16)
+	x = Conv2DTranspose(filters=64, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 250, 64)
+	x = BatchNormalization()(x)
+	
+	x = UpSampling2D((1,2))(x)																		# output shape = (None, 1, 500, 64)
+	x = Conv2DTranspose(filters=32, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 500, 32)
+	x = BatchNormalization()(x)	
+	
+	x = UpSampling2D((1,2))(x)																		# output shape = (None, 1, 1000, 32)
+	x = Conv2DTranspose(filters=1, kernel_size=(1, 3), padding='same')(x)							# output shape = (None, 1, 1000, 1)
+	outputs = tf.keras.layers.Normalization(invert=True)(x)
+
+
+	return outputs
+																									
+
+
 
 
 

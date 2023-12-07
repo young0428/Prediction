@@ -94,7 +94,7 @@ class MAE(Model):
 v = ViT(
     image_size = 256,
     patch_size = 32,
-    num_classes = 1000,
+    self.num_classes = 1000,
     dim = 1024,
     depth = 6,
     heads = 8,

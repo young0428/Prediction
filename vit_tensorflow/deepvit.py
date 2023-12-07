@@ -114,12 +114,12 @@ class DeepViT(Model):
                  pool='cls', dim_head=64, dropout=0.0, emb_dropout=0.0):
         super(DeepViT, self).__init__()
 
-        assert image_size % patch_size == 0, 'Image dimensions must be divisible by the patch size.'
-        num_patches = (image_size // patch_size) ** 2
+        #assert image_size % patch_size == 0, 'Image dimensions must be divisible by the patch size.'
+        num_patches = int(image_size[0] * image_size[1] / (patch_size[0] * patch_size[1]))
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
 
         self.patch_embedding = Sequential([
-            Rearrange('b (h p1) (w p2) c -> b (h w) (p1 p2 c)', p1=patch_size, p2=patch_size),
+            Rearrange('b (h p1) (w p2) c -> b (h w) (p1 p2 c)', p1=patch_size[0], p2=patch_size[1]),
             nn.Dense(units=dim)
         ], name='patch_embedding')
 
@@ -133,7 +133,11 @@ class DeepViT(Model):
 
         self.mlp_head = Sequential([
             nn.LayerNormalization(),
-            nn.Dense(units=num_classes)
+            nn.Dense(units=num_classes, activation=tf.nn.swish),
+            nn.Dropout(0.1),
+            nn.Dense(units=256, activation=tf.nn.swish),
+            nn.Dense(1)
+
         ], name='mlp_head')
 
     def call(self, img, training=True, **kwargs):

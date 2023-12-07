@@ -1,17 +1,10 @@
 import numpy as np
 import random
-import operator
+import pywt
 import scipy
 def GetBatchIndexes(data_len, batch_num, mult=20):
     batch_size = data_len / batch_num
-    # if mult == 0:
-    #     mul = batch_size
-    # else:
-    #     mul = mult
-    # batch_seg_size = batch_size / mul
     idx_list = list(range(data_len))
-    
-    #idx_list = [ list(range(int(i*batch_seg_size), int((i+1)*batch_seg_size))) for i in range(int(batch_num*mul)) ]
     random.shuffle(idx_list)
 
     batch_idx_mask = []
@@ -45,6 +38,23 @@ def AbsFFT(signal):
     filtered_abs = abs(filtered)
 
     return filtered_abs
+
+# Raw EEG batch를 받아서 CWT를 수행한 후 (Batch_size, scale_resolution, window_size * freq) return
+def SegmentsCWT(segments, sampling_rate, scale_resolution = 128):
+    cwt_result = []
+    for segment in segments:
+        eeg_data = np.squeeze(segment)
+        freqs = np.logspace(np.log10(100),np.log10(0.1),scale_resolution) / sampling_rate
+        #freqs = np.linspace(100,0.1,scale_resolution) / sampling_rate
+        scale = pywt.frequency2scale('cgau8',freqs) 
+        cwtmatr, _= pywt.cwt(eeg_data, wavelet='cgau8', scales = scale)
+        # normalize
+        cwtmatr /= np.abs(cwtmatr).max()
+        cwt_image = np.abs(cwtmatr)
+
+        cwt_result.append(cwt_image)
+
+    return cwt_result
 
 
 

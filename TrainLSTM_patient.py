@@ -1,16 +1,9 @@
 
 # %%
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-os.environ['TF_GPU_THREAD_MODE']='gpu_private'
-from datetime import datetime
-import sys
 import numpy as np
-import random
-import operator
 import matplotlib.pyplot as plt
 import pickle
-import copy
 import seaborn as sns
 
 import tensorflow as tf
@@ -24,7 +17,7 @@ from readDataset import *
 import AutoEncoder 
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
-import PreProcessing
+from ModelGenerator import FullModel_generator
 
 
 tf.get_logger().setLevel('ERROR')
@@ -35,108 +28,7 @@ if gpus:
   except RuntimeError as e:
     print(e)
 
-
-
-
 # %%
-class FullModel_generator(Sequence):
-    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, data_type = 'snu', gen_type = 'train'):
-        
-        self.ratio_type_1 = [200]*4
-        self.ratio_type_2 = [1]*4
-        self.ratio_type_3 = [200]*4
-        self.batch_size = batch_size
-        self.epoch = 0
-        self.update_period = 20
-        self.type_1_data = np.array(type_1_data)
-        self.type_2_data = np.array(type_2_data)
-        self.type_3_data = np.array(type_3_data)
-        self.type_1_len = len(type_1_data)
-        self.type_2_len = len(type_2_data)
-        self.type_3_len = len(type_3_data)
-        self.data_type = data_type
-
-        self.iden_mat = np.eye(2)
-        if gen_type == 'val':
-            self.batch_size = 20
-        self.batch_set, self.batch_num = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[0], self.ratio_type_2[0], self.ratio_type_3[0]], self.batch_size)
-        
-    def on_epoch_end(self):
-        self.epoch += 1
-        if self.epoch/self.update_period < 4:
-            self.ratio_idx = int(self.epoch/self.update_period)
-        else:
-            self.ratio_idx = 3
-        self.ratio_idx = 0
-        self.batch_set, self.batch_num = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[self.ratio_idx], self.ratio_type_2[self.ratio_idx], self.ratio_type_3[self.ratio_idx]], self.batch_size)        
-    
-    def __len__(self):
-        return self.batch_num
-    
-    def __getitem__(self, idx):
-        batch_concat = None
-        if len(self.batch_set[1][idx]) == 0:
-            type_1_seg = []
-        else:
-            type_1_seg = self.type_1_data[self.batch_set[0][self.batch_set[1][idx]]]
-            batch_concat = type_1_seg
-  
-        if len(self.batch_set[3][idx]) == 0:
-            type_2_seg = []
-        else:
-            type_2_seg = self.type_2_data[self.batch_set[2][self.batch_set[3][idx]]]
-            batch_concat = np.concatenate((batch_concat, type_2_seg))
-        if len(self.batch_set[5][idx]) == 0:
-            type_3_seg = []
-        else:
-            type_3_seg = self.type_3_data[self.batch_set[4][self.batch_set[5][idx]]]
-            batch_concat = np.concatenate((batch_concat, type_3_seg))
-            
-        x_batch = Segments2Data(batch_concat, self.data_type)
-        
-        type_1_len = len(type_1_seg)
-        type_2_len = len(type_2_seg)
-        type_3_len = len(type_3_seg)
-        # x_batch_type_1 = Segments2Data(self.type_1_data[self.batch_set[0][self.batch_set[1][idx]]],self.data_type)
-        # x_batch_type_2 = Segments2Data(self.type_2_data[self.batch_set[2][self.batch_set[3][idx]]],self.data_type)
-        # x_batch_type_3 = Segments2Data(self.type_3_data[self.batch_set[4][self.batch_set[5][idx]]],self.data_type)
-        # x_batch = None
-        # if x_batch_type_1.ndim == 3:
-        #     if np.all(x_batch== None):
-        #         x_batch = x_batch_type_1
-        #     else:
-        #         x_batch = np.concatenate((x_batch, x_batch_type_1))
-        #     type_1_len = len(x_batch_type_1)
-        # else:
-        #     type_1_len = 0
-
-        # if x_batch_type_2.ndim == 3:
-        #     if np.all(x_batch== None):
-        #         x_batch = x_batch_type_2
-        #     else:
-        #         x_batch = np.concatenate((x_batch, x_batch_type_2))
-        #     type_2_len = len(x_batch_type_2)
-        # else:
-        #     type_2_len = 0
-
-        # if x_batch_type_3.ndim == 3:
-        #     if np.all(x_batch== None):
-        #         x_batch = x_batch_type_3
-        #     else:
-        #         x_batch = np.concatenate((x_batch, x_batch_type_3))
-        #     type_3_len = len(x_batch_type_3)
-        # else:
-        #     type_3_len = 0
-
-        #x_batch = PreProcessing.FilteringSegments(x_batch)
-        y_batch = np.concatenate(( np.ones(type_1_len)*1, 
-                                   np.ones(type_2_len)*0, 
-                                   np.ones(type_3_len)*0))
-        
-        #y_batch = self.iden_mat[y_categorical]
-
-        return x_batch, y_batch
-
 def train(model_name, encoder_model_name, data_type = 'snu'):
     window_size = 5
     overlap_sliding_size = 2
@@ -173,10 +65,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
         encoder_output = encoder_output_layer.output
         encoder_model = Model(inputs=encoder_inputs, outputs=encoder_output)
         encoder_model.trainable = False
-
-    
-
-    else:
+    elif data_type == 'chb':
         # train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
         # test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
         # edf_file_path = "/host/d/CHB"
@@ -330,7 +219,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                         callbacks= [  cp_callback, early_stopping, backup_callback ]
             )
 
-            matrix, postprocessed_matrix, sens, fpr, seg_results = TestFullModel_specific.validation(checkpoint_path,val_intervals, data_type, 5,4)
+            matrix, postprocessed_matrix, sens, fpr, seg_results = TestFullModel_specific.validation(checkpoint_path, val_intervals, data_type, 5,4)
             patient_sens_sum += sens
             patient_fpr_sum += fpr
             result_list = [matrix, postprocessed_matrix, sens, fpr, seg_results]

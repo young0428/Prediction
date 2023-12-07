@@ -72,7 +72,7 @@ class ValidatonTestData :
         return patient_name_list
 
     def IntervalSorting(self, interval_sets):
-        state_list = ['preictal_ontime', 'ictal', 'preictal_late','interictal']
+        state_list = ['preictal_ontime', 'preictal_late','interictal']
         self.state_dict = {'preictal_ontime':1, 'ictal':0, 'preictal_late':1, 'preictal_early':0, 'postictal':0,'interictal':0}
         temp = []
         self.intervals_state = []
@@ -162,8 +162,6 @@ class ValidatonTestData :
         for idx, segment in enumerate(self.results):
             self.results[idx] += [self.true[idx], self.pred_cat[idx]]
             self.seg_res.append(self.results[idx])
-        
-
 
     # K of N을 적용해서 alarm 울림 (1), alarm 안울림 (0) 결정
     # 데이터 

@@ -1,2 +1,7 @@
 /logs
 /ae_test
+*.png
+/LSTM
+/ViT
+/vit_tensorflow
+/AutoEncoder

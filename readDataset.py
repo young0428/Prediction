@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import copy
 import PreProcessing
+import pywt
 from scipy.signal import resample
 # 데이터 정리 
 global state_list
@@ -86,19 +87,22 @@ def FilteringByChannel(intervals, edf_path, type):
                     'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4',
                     'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
                     'P8-O2', 'FZ-CZ', 'CZ-PZ']
-    channels_one = ['Fp1-AVG']
+    channels_snu_one = ['Fp1-AVG']
+    channels_chb_one = ['FP1-F7']
 
     if type == 'snu':
         channels = channels_snu
     elif type == 'chb':
         channels = channels_chb
-    else:
-        channels = channels_one
+    elif type == 'snu_one_ch':
+        channels = channels_snu_one
+    elif type == 'chb_one_ch':
+        channels = channels_chb_one
     copied_intervals = copy.deepcopy(intervals)
     
     mask = np.ones(len(copied_intervals),dtype=bool)
     del_cnt = 0
-    for idx,interval in enumerate(copied_intervals):
+    for idx,interval in enumerate(intervals):
         with pyedflib.EdfReader(MakePath(interval[0], edf_path)) as f:
             labels = f.getSignalLabels()
             if not all([channel in labels for channel in channels]):
@@ -232,20 +236,29 @@ def Interval2Segments(interval_list, data_path, window_size, sliding_size):
     return segments_list
 
 
-def Segments2Data(segments, type='snu'):
+
+
+
+def Segments2Data(segments, type='snu', manual_channels=None):
     # segment[0] = 'filename', segment[1] = 'start', segment[2] = 'duration'
     channels_snu = ['Fp1-AVG', 'F3-AVG', 'C3-AVG', 'P3-AVG', 'Fp2-AVG', 'F4-AVG', 'C4-AVG', 'P4-AVG', 'F7-AVG', 'T1-AVG', 'T3-AVG', 'T5-AVG', 'O1-AVG', 'F8-AVG', 'T2-AVG', 'T4-AVG', 'T6-AVG', 'O2-AVG', 'Fz-AVG', 'Cz-AVG', 'Pz-AVG']
     channels_chb = ['FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3',
                     'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4',
                     'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
                     'P8-O2', 'FZ-CZ', 'CZ-PZ']
-    channels_one = ['Fp1-AVG']
+    channels_snu_one = ['Fp1-AVG']
+    channels_chb_one = ['FP1-F7']
     if type == 'snu':
         channels = channels_snu
     elif type == 'chb':
         channels = channels_chb
-    else:
-        channels = channels_one
+    elif type == 'snu_one_ch':
+        channels = channels_snu_one
+    elif type == 'chb_one_ch':
+        channels = channels_chb_one 
+    
+    if manual_channels != None:
+        channels = manual_channels
 
     signal_for_all_segments = []
     name = None
@@ -264,6 +277,7 @@ def Segments2Data(segments, type='snu'):
         labels = f.getSignalLabels()
         
         if not all([channel in labels for channel in channels]):
+            print(segment)
             f.close()
             continue
 
@@ -282,8 +296,6 @@ def Segments2Data(segments, type='snu'):
                 skip_start = True
                 continue
         skip_start = False
-                
-        
 
         chn_num = len(channels)
 
@@ -298,13 +310,15 @@ def Segments2Data(segments, type='snu'):
         for channel in channels:
             ch_idx = labels.index(channel)
             signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*(read_end-read_start)))
-            
             #128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
             if not freq[ch_idx] == target_sampling_rate:
-                signal = resample(signal, int(len(signal) / freq[ch_idx] * target_sampling_rate ))
+                signal = resample(signal, int(float(segment[2]) * target_sampling_rate ))
+                
             
+            # for j in range(len(interval_sets)):
+            #     seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
             for j in range(len(interval_sets)):
-                seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
+                seg[j].append( list(signal) )
     
         for s in seg:    
             signal_for_all_segments.append(s)
@@ -314,30 +328,38 @@ def Segments2Data(segments, type='snu'):
     
     del f
 
-    return np.array(signal_for_all_segments)/50
+    return np.array(signal_for_all_segments)
 
 def updateDataSet(type_1_len, type_2_len, type_3_len, portion, batch_size):
+    type_1_devided_by_portion = type_1_len/portion[0]
+    type_2_devided_by_portion = type_2_len/portion[1]
+    type_3_devided_by_portion = type_3_len/portion[2]
+
+    if type_1_len == 0 : type_1_devided_by_portion = np.inf
+    if type_2_len == 0 : type_2_devided_by_portion = np.inf
+    if type_3_len == 0 : type_3_devided_by_portion = np.inf
+
+    n = int(min(type_1_devided_by_portion, type_2_devided_by_portion, type_3_devided_by_portion))
+
+    if type_1_len == 0 : type_1_sample_num = 0
+    else : type_1_sample_num = int(n*portion[0])
+    if type_2_len == 0 : type_2_sample_num = 0
+    else : type_2_sample_num = int(n*portion[0])
+    if type_3_len == 0 : type_3_sample_num = 0
+    else : type_3_sample_num = int(n*portion[0])
     
-    n = int(min(type_1_len/portion[0], type_2_len/portion[1], type_3_len/portion[2]))
-
-
-    type_1_sample_num = int(n*portion[0])
-    type_2_sample_num = int(n*portion[1])
-    type_3_sample_num = int(n*portion[2])
 
     if (type_1_sample_num+type_2_sample_num+type_3_sample_num) < batch_size :
         type_1_sample_num += int(batch_size/2)
         type_3_sample_num += int(batch_size/2)
     
-    
+    batch_num = int((type_1_sample_num+type_2_sample_num+type_3_sample_num)/batch_size)
 
     # Sampling mask 생성
+    
     type_1_sampling_mask = np.array(sorted(np.random.choice(type_1_len, type_1_sample_num, replace=False)))
     type_2_sampling_mask = np.array(sorted(np.random.choice(type_2_len, type_2_sample_num, replace=False)))
     type_3_sampling_mask = np.array(sorted(np.random.choice(type_3_len, type_3_sample_num, replace=False)))
-
-    batch_num = int((type_1_sample_num+type_2_sample_num+type_3_sample_num)/batch_size)
-
     
     type_1_batch_indexes = PreProcessing.GetBatchIndexes(type_1_sample_num, batch_num, 0)
     type_2_batch_indexes = PreProcessing.GetBatchIndexes(type_2_sample_num, batch_num, 0)

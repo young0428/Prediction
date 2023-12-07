@@ -1,196 +1,180 @@
+"""
+Title: Image classification with Vision Transformer
+Author: [Khalid Salama](https://www.linkedin.com/in/khalid-salama-24403144/)
+Date created: 2021/01/18
+Last modified: 2021/01/18
+Description: Implementing the Vision Transformer (ViT) model for image classification.
+Accelerator: GPU
+"""
+
+"""
+## Introduction
+
+This example implements the [Vision Transformer (ViT)](https://arxiv.org/abs/2010.11929)
+model by Alexey Dosovitskiy et al. for image classification,
+and demonstrates it on the CIFAR-100 dataset.
+The ViT model applies the Transformer architecture with self-attention to sequences of
+image patches, without using convolution layers.
+
+"""
+
+"""
+## Setup
+"""
+
+import os
+
+#os.environ["KERAS_BACKEND"] = "jax"  # @param ["tensorflow", "jax", "torch"]
+
+import keras
+from keras import layers
 import tensorflow as tf
-from tensorflow.keras import Model
-from tensorflow.keras.layers import Layer
-from tensorflow.keras import Sequential
-import tensorflow.keras.layers as nn
 
-from tensorflow import einsum
-from einops import rearrange, repeat
-from einops.layers.tensorflow import Rearrange
 
-def pair(t):
-    return t if isinstance(t, tuple) else (t, t)
+import numpy as np
+import matplotlib.pyplot as plt
 
-class PreNorm(Layer):
-    def __init__(self, fn):
-        super(PreNorm, self).__init__()
+class PatchEncoder(layers.Layer):
+    def __init__(self, num_patches, projection_dim):
+        super().__init__()
+        self.num_patches = num_patches
+        self.projection = layers.Dense(units=projection_dim)
+        self.position_embedding = layers.Embedding(
+            input_dim=num_patches, output_dim=projection_dim
+        )
 
-        self.norm = nn.LayerNormalization()
-        self.fn = fn
+    def call(self, patch):
+        positions = tf.keras.backend.expand_dims(
+            tf.keras.backend.arange(start=0, stop=self.num_patches, step=1), axis=0
+        )
+        projected_patches = self.projection(patch)
+        encoded = projected_patches + self.position_embedding(positions)
+        return encoded
 
-    def call(self, x, training=True):
-        return self.fn(self.norm(x), training=training)
+    def get_config(self):
+        config = super().get_config()
+        config.update({"num_patches": self.num_patches})
+        return config
+    
+class Patches(layers.Layer):
+    def __init__(self, patch_size):
+        super().__init__()
+        self.patch_size = patch_size
 
-class MLP(Layer):
-    def __init__(self, dim, hidden_dim, dropout=0.0):
-        super(MLP, self).__init__()
+    def call(self, images):
+        input_shape = tf.keras.backend.shape(images)
+        batch_size = input_shape[0]
+        height = input_shape[1]
+        width = input_shape[2]
+        channels = input_shape[3]
+        num_patches_h = height // self.patch_size[0]
+        num_patches_w = width // self.patch_size[1]
+        patch_h = self.patch_size[0]
+        patch_w = self.patch_size[1]
+        
+        patches = tf.image.extract_patches(
+            images=images,
+            sizes=[1, patch_h, patch_w, 1],
+            strides=[1,patch_h, patch_w, 1],
+            rates=[1,1,1,1],
+            padding='VALID'
+            )
+        
+        patches = tf.keras.backend.reshape(
+            patches,
+            (
+                batch_size,
+                num_patches_h * num_patches_w,
+                self.patch_size[0] * self.patch_size[1] * channels,
+            ),
+        )
+        
+        return patches
 
-        def GELU():
-            def gelu(x, approximate=False):
-                if approximate:
-                    coeff = tf.cast(0.044715, x.dtype)
-                    return 0.5 * x * (1.0 + tf.tanh(0.7978845608028654 * (x + coeff * tf.pow(x, 3))))
-                else:
-                    return 0.5 * x * (1.0 + tf.math.erf(x / tf.cast(1.4142135623730951, x.dtype)))
+    def get_config(self):
+        config = super().get_config()
+        config.update({"patch_size": self.patch_size})
+        return config
 
-            return nn.Activation(gelu)
+class ViT :
+    def __init__(self, image_shape, patch_shape,  num_heads, transformer_units, mlp_head_units, projection_dim = 64, num_layers = 8, learning_rate = 0.001, sweight_decay = 0.0001, num_classes = 1):
+        self.learning_rate = 0.001
+        self.weight_decay = 0.0001
+        self.num_classes = num_classes
+        self.input_shape = image_shape
+        self.patch_shape = patch_shape
+        self.num_patches = int((image_shape[0] * image_shape[1])  / (patch_shape[0] * patch_shape[1]))
+        self.projection_dim = projection_dim
+        self.num_heads = num_heads
+        self.transformer_units = transformer_units
+        self.transformer_layers = num_layers
+        self.mlp_head_units = mlp_head_units
 
-        self.net = Sequential([
-            nn.Dense(units=hidden_dim),
-            GELU(),
-            nn.Dropout(rate=dropout),
-            nn.Dense(units=dim),
-            nn.Dropout(rate=dropout)
-        ])
-
-    def call(self, x, training=True):
-        return self.net(x, training=training)
-
-class Attention(Layer):
-    def __init__(self, dim, heads=8, dim_head=64, dropout=0.0):
-        super(Attention, self).__init__()
-        inner_dim = dim_head * heads
-        project_out = not (heads == 1 and dim_head == dim)
-
-        self.heads = heads
-        self.scale = dim_head ** -0.5
-
-        self.attend = nn.Softmax()
-        self.to_qkv = nn.Dense(units=inner_dim * 3, use_bias=False)
-
-        if project_out:
-            self.to_out = [
-                nn.Dense(units=dim),
-                nn.Dropout(rate=dropout)
-            ]
-        else:
-            self.to_out = []
-
-        self.to_out = Sequential(self.to_out)
-
-    def call(self, x, training=True):
-        qkv = self.to_qkv(x)
-        qkv = tf.split(qkv, num_or_size_splits=3, axis=-1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
-
-        # dots = tf.matmul(q, tf.transpose(k, perm=[0, 1, 3, 2])) * self.scale
-        dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
-        attn = self.attend(dots)
-
-        # x = tf.matmul(attn, v)
-        x = einsum('b h i j, b h j d -> b h i d', attn, v)
-        x = rearrange(x, 'b h n d -> b n (h d)')
-        x = self.to_out(x, training=training)
-
+    def mlp(self, x, hidden_units, dropout_rate):
+        for units in hidden_units:
+            x = layers.Dense(units, activation=keras.activations.gelu)(x)
+            x = layers.Dropout(dropout_rate)(x)
         return x
 
-class Transformer(Layer):
-    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.0):
-        super(Transformer, self).__init__()
+    def create_vit_layer(self, inputs, name = 'ViT'):
+        # Create patches.
+        patches = Patches(self.patch_shape)(inputs)
+        # Encode patches.
+        encoded_patches = PatchEncoder(self.num_patches, self.projection_dim)(patches)
 
-        self.layers = []
+        # Create multiple layers of the Transformer block.
+        for _ in range(self.transformer_layers):
+            # Layer normalization 1.
+            x1 = layers.LayerNormalization(epsilon=1e-6)(encoded_patches)
+            # Create a multi-head attention layer.
+            attention_output = layers.MultiHeadAttention(
+                num_heads=self.num_heads, key_dim=self.projection_dim, dropout=0.1
+            )(x1, x1)
+            # Skip connection 1.
+            x2 = layers.Add()([attention_output, encoded_patches])
+            # Layer normalization 2.
+            x3 = layers.LayerNormalization(epsilon=1e-6)(x2)
+            # MLP.
+            x3 = self.mlp(x3, hidden_units=self.transformer_units, dropout_rate=0.1)
+            # Skip connection 2.
+            encoded_patches = layers.Add()([x3, x2])
 
-        for _ in range(depth):
-            self.layers.append([
-                PreNorm(Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
-                PreNorm(MLP(dim, mlp_dim, dropout=dropout))
-            ])
+        # Create a [batch_size, projection_dim] tensor.
+        representation = layers.LayerNormalization(epsilon=1e-6)(encoded_patches)
+        representation = layers.Flatten()(representation)
+        representation = layers.Dropout(0.5)(representation)
+        # Add MLP.
+        features = self.mlp(representation, hidden_units=self.mlp_head_units, dropout_rate=0.5)
+        # Classify outputs.
+        # logits = layers.Dense(self.num_classes)(features)
+        # Create the Keras model.
+        #model = keras.Model(inputs=inputs, outputs=features, name=name)
 
-    def call(self, x, training=True):
-        for attn, mlp in self.layers:
-            x = attn(x, training=training) + x
-            x = mlp(x, training=training) + x
+        return features
 
-        return x
 
-class ViT(Model):
-    def __init__(self, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim,
-                 pool='cls', dim_head=64, dropout=0.0, emb_dropout=0.0):
-        """
-            image_size: int.
-            -> Image size. If you have rectangular images, make sure your image size is the maximum of the width and height
-            patch_size: int.
-            -> Number of patches. image_size must be divisible by patch_size.
-            -> The number of patches is: n = (image_size // patch_size) ** 2 and n must be greater than 16.
-            num_classes: int.
-            -> Number of classes to classify.
-            dim: int.
-            -> Last dimension of output tensor after linear transformation nn.Linear(..., dim).
-            depth: int.
-            -> Number of Transformer blocks.
-            heads: int.
-            -> Number of heads in Multi-head Attention layer.
-            mlp_dim: int.
-            -> Dimension of the MLP (FeedForward) layer.
-            dropout: float between [0, 1], default 0..
-            -> Dropout rate.
-            emb_dropout: float between [0, 1], default 0.
-            -> Embedding dropout rate.
-            pool: string, either cls token pooling or mean pooling
-        """
-        super(ViT, self).__init__()
+"""
+## Compile, train, and evaluate the mode
+"""
 
-        image_height, image_width = pair(image_size)
-        patch_height, patch_width = pair(patch_size)
 
-        assert image_height % patch_height == 0 and image_width % patch_width == 0, 'Image dimensions must be divisible by the patch size.'
 
-        num_patches = (image_height // patch_height) * (image_width // patch_width)
-        assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
 
-        self.patch_embedding = Sequential([
-            Rearrange('b (h p1) (w p2) c -> b (h w) (p1 p2 c)', p1=patch_height, p2=patch_width),
-            nn.Dense(units=dim)
-        ], name='patch_embedding')
 
-        self.pos_embedding = tf.Variable(initial_value=tf.random.normal([1, num_patches + 1, dim]))
-        self.cls_token = tf.Variable(initial_value=tf.random.normal([1, 1, dim]))
-        self.dropout = nn.Dropout(rate=emb_dropout)
 
-        self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim, dropout)
 
-        self.pool = pool
+"""
+After 100 epochs, the ViT model achieves around 55% accuracy and
+82% top-5 accuracy on the test data. These are not competitive results on the CIFAR-100 dataset,
+as a ResNet50V2 trained from scratch on the same data can achieve 67% accuracy.
 
-        self.mlp_head = Sequential([
-            nn.LayerNormalization(),
-            nn.Dense(units=num_classes)
-        ], name='mlp_head')
-
-    def call(self, img, training=True, **kwargs):
-        x = self.patch_embedding(img)
-        b, n, d = x.shape
-
-        cls_tokens = repeat(self.cls_token, '() n d -> b n d', b=b)
-        x = tf.concat([cls_tokens, x], axis=1)
-        x += self.pos_embedding[:, :(n + 1)]
-        x = self.dropout(x, training=training)
-
-        x = self.transformer(x, training=training)
-
-        if self.pool == 'mean':
-            x = tf.reduce_mean(x, axis=1)
-        else:
-            x = x[:, 0]
-
-        x = self.mlp_head(x)
-
-        return x
-
-""" Usage
-
-v = ViT(
-    image_size = 256,
-    patch_size = 32,
-    num_classes = 1000,
-    dim = 1024,
-    depth = 6,
-    heads = 16,
-    mlp_dim = 2048,
-    dropout = 0.1,
-    emb_dropout = 0.1
-)
-
-img = tf.random.normal(shape=[1, 256, 256, 3])
-preds = v(img) # (1, 1000)
-
+Note that the state of the art results reported in the
+[paper](https://arxiv.org/abs/2010.11929) are achieved by pre-training the ViT model using
+the JFT-300M dataset, then fine-tuning it on the target dataset. To improve the model quality
+without pre-training, you can try to train the model for more epochs, use a larger number of
+Transformer layers, resize the input images, change the patch size, or increase the projection dimensions.
+Besides, as mentioned in the paper, the quality of the model is affected not only by architecture choices,
+but also by parameters such as the learning rate schedule, optimizer, weight decay, etc.
+In practice, it's recommended to fine-tune a ViT model
+that was pre-trained using a large, high-resolution dataset.
 """

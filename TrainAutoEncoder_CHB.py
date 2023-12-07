@@ -33,87 +33,12 @@ if gpus:
     print(e)
 
 # %%
-class autoencoder_generator(Sequence):
-    def __init__(self,type_1_data, type_2_data, type_3_data, batch_size, model_name, gen_type):
-    
-        self.ratio_type_1 = [2,2,2,2]
-        self.ratio_type_2 = [2,2,2,2]
-        self.ratio_type_3 = [6,6,6,6]
-        
-        self.batch_size = batch_size
-        self.check = True
-        self.epoch = 0
-        self.cnt = 0
-        self.update_period = 5*2
-        self.type_1_data = type_1_data
-        self.type_2_data = type_2_data
-        self.type_3_data = type_3_data
-        self.test_on = False
-        self.ratio_idx = 0
-        self.model_name = model_name
-        self.gen_type = gen_type
-
-        self.update_data()
-
-    def on_epoch_end(self):
-        self.epoch += 1
-        self.update_data()
-        if self.gen_type == "train":
-            if self.epoch % 6 == 0:
-                try:
-                    test_ae(int(self.epoch/2), 5, 2, 128, self.model_name)
-                except:
-                    print("Fail to generate test fig")
-
-    def __len__(self):
-        return self.batch_num
-
-    def update_data(self):
-        # 데이터 밸런스를 위해 데이터 밸런스 조절 및 resampling
-        if self.epoch/self.update_period < 4:
-            self.ratio_idx = int(self.epoch/self.update_period)
-        else:
-            self.ratio_idx = 3
-        # ratio에 따라 데이터 갯수 정함
-        self.type_1_sampled_len = len(self.type_1_data)
-        self.type_2_sampled_len = min(int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_2[self.ratio_idx]),len(self.type_2_data))
-        self.type_3_sampled_len = int((self.type_1_sampled_len/self.ratio_type_1[self.ratio_idx])*self.ratio_type_3[self.ratio_idx])
-        # Sampling mask 생성
-        self.type_2_sampling_mask = sorted(np.random.choice(len(self.type_2_data), self.type_2_sampled_len, replace=False))
-        self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
-
-        self.type_2_sampled = self.type_2_data[self.type_2_sampling_mask]
-        self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
-
-        self.batch_num = int((self.type_1_sampled_len + self.type_2_sampled_len + self.type_3_sampled_len)/self.batch_size)
-        
-        self.type_1_batch_indexes = PreProcessing.GetBatchIndexes(self.type_1_sampled_len, self.batch_num)
-        self.type_2_batch_indexes = PreProcessing.GetBatchIndexes(self.type_2_sampled_len, self.batch_num)
-        self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
-
-    def __getitem__(self, idx):
-        input_seg = np.concatenate((self.type_1_data[self.type_1_batch_indexes[idx]], 
-                                    self.type_2_sampled[self.type_2_batch_indexes[idx]], 
-                                    self.type_3_sampled[self.type_3_batch_indexes[idx]]))
-        
-        x_batch = Segments2Data(input_seg,'chb')
-        #x_batch = PreProcessing.AbsFFT(x_batch)
-        x_batch = PreProcessing.FilteringSegments(x_batch)
-
-        # if (idx+1) % int(self.batch_num / 3) == 0 and self.gen_type == "train":
-        #     self.type_3_sampling_mask = sorted(np.random.choice(len(self.type_3_data), self.type_3_sampled_len, replace=False))
-        #     self.type_3_sampled = self.type_3_data[self.type_3_sampling_mask]
-        #     self.type_3_batch_indexes = PreProcessing.GetBatchIndexes(self.type_3_sampled_len, self.batch_num)
-  
-        return x_batch, x_batch
-
-# %%
 def train(model_name):
     window_size = 5
     overlap_sliding_size = 2
     normal_sliding_size = window_size
     ch_num = 18
-    sr = 128
+    sr = 200
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL

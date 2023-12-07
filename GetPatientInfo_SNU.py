@@ -57,11 +57,6 @@ for info in total_seizure_info_list:
 	for i in range(len(seizure_time_set)):
 		seizure_start_time = seizure_time_set[i][0]
 		seizure_end_time = seizure_time_set[i][1]
-		
-
-		# interictal이 될 수 없는 부분 0으로 초기화
-		# interictal == 5
-
 		# seizure 시작 전 3시간 0으로 초기화
 		if not seizure_start_time - interictal_gap < 0:
 			seizure_time_flag[seizure_start_time - interictal_gap :seizure_start_time] = 0
@@ -75,26 +70,34 @@ for info in total_seizure_info_list:
 
 		## 밑으로 갈수록 우선순위 높음
 		## 덮어씌워짐
-
+	for i in range(len(seizure_time_set)):
+		seizure_start_time = seizure_time_set[i][0]
+		seizure_end_time = seizure_time_set[i][1]
 		# preictal_early 부분 2로 만듦
 		if not seizure_start_time - early_gap < 0 :
 			seizure_time_flag[seizure_start_time - early_gap : seizure_start_time] = 2
 		else:
 			seizure_time_flag[0 : seizure_start_time] = 2
-		
+	for i in range(len(seizure_time_set)):
+		seizure_start_time = seizure_time_set[i][0]
+		seizure_end_time = seizure_time_set[i][1]
 		# preictal_ontime 부분 3으로 만듦
 		if not seizure_start_time - ontime_gap < 0:
 			seizure_time_flag[seizure_start_time - ontime_gap : seizure_start_time] = 3
 		else:
 			seizure_time_flag[0 : seizure_start_time] = 3
-
+	for i in range(len(seizure_time_set)):
+		seizure_start_time = seizure_time_set[i][0]
+		seizure_end_time = seizure_time_set[i][1]
 		# preictal_late 부분 4으로 만듦
 		if not seizure_start_time - late_gap < 0 :
 			seizure_time_flag[seizure_start_time - late_gap : seizure_start_time] = 4
 		else:
 			seizure_time_flag[0 : seizure_start_time] = 4
 
-		
+	for i in range(len(seizure_time_set)):
+		seizure_start_time = seizure_time_set[i][0]
+		seizure_end_time = seizure_time_set[i][1]
 		seizure_time_flag[seizure_start_time:seizure_end_time] = 1
 
 		
