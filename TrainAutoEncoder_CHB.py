@@ -118,7 +118,6 @@ def train(model_name):
 
     logs = "logs/" + model_name + "-" + datetime.now().strftime("%Y%m%d-%H%M%S")
 
-
     tboard_callback = tf.keras.callbacks.TensorBoard(log_dir = logs,
                                                     histogram_freq = 1,
                                                     profile_batch = '1,400')

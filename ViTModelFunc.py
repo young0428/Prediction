@@ -28,14 +28,14 @@ if gpus:
 # %%
 def train(model_name, data_type = 'snu'):
     epochs = 100
-    batch_size = 40 # 한번의 gradient update시마다 들어가는 데이터의 사이즈
-    window_size = 4
+    batch_size = 48 # 한번의 gradient update시마다 들어가는 데이터의 사이즈
+    window_size = 8
     overlap_sliding_size = 2
     normal_sliding_size = window_size
     sampling_rate = 200
     scale_rate = 128
     patch_shape = (2, 2)
-    downsampling_factor = 1
+    downsampling_factor = 2
 
     checkpoint_path = f"ViT/{model_name}/cp.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
@@ -94,7 +94,7 @@ def train(model_name, data_type = 'snu'):
             except:
                 pass
             model = one_channel_mobile_vit(
-                image_size = (scale_rate, (window_size * sampling_rate / downsampling_factor), 1),
+                image_size = (scale_rate, int(window_size * sampling_rate / downsampling_factor), 1),
                 patch_shape = patch_shape
             )
     elif data_type=='chb_one_ch':
@@ -202,14 +202,16 @@ def train(model_name, data_type = 'snu'):
                                         batch_size = batch_size,
                                         data_type = data_type,
                                         scale_resolution = scale_rate,
-                                        sampling_rate=sampling_rate
+                                        sampling_rate=sampling_rate,
+                                        ds_factor=downsampling_factor
                                         )
     test_generator = ViTGenerator_one_channel(type_1_data = test_type_1,
                                         type_3_data = test_type_3, 
                                         batch_size = batch_size,
                                         data_type = data_type,
                                         scale_resolution = scale_rate,
-                                        sampling_rate=sampling_rate
+                                        sampling_rate=sampling_rate,
+                                        ds_factor=downsampling_factor
                                         )
 
     
@@ -218,7 +220,8 @@ def train(model_name, data_type = 'snu'):
                 epochs = epochs,
                 validation_data = test_generator,
                 use_multiprocessing=True,
-                workers=12,
+                workers=28,
+                max_queue_size=30,
                 shuffle=True,
                 callbacks= [ tboard_callback, cp_callback, early_stopping, backup_callback ]
                 )

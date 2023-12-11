@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 from keras.utils import Sequence
 from readDataset import *
 import PreProcessing
@@ -58,6 +59,8 @@ class FullModel_generator(Sequence):
             batch_concat = np.concatenate((batch_concat, type_3_seg))
             
         x_batch = Segments2Data(batch_concat, self.data_type)
+        #x_batch = PreProcessing.FilteringSegments(x_batch)
+
         
         type_1_len = len(type_1_seg)
         type_2_len = len(type_2_seg)
@@ -67,6 +70,9 @@ class FullModel_generator(Sequence):
                                    np.zeros(type_2_len), 
                                    np.zeros(type_3_len)))
         
+        y_batch = np.asarray(y_batch, dtype=np.int32)
+        y_batch = self.iden_mat[y_batch]
+        
 
         return x_batch, y_batch
     
@@ -74,7 +80,7 @@ class FullModel_generator(Sequence):
 
 
 class ViTGenerator_one_channel(Sequence):
-    def __init__(self,type_1_data=[], type_2_data=[], type_3_data=[], batch_size=500, data_type = 'snu', scale_resolution = 128, sampling_rate = 200):
+    def __init__(self,type_1_data=[], type_2_data=[], type_3_data=[], batch_size=500, data_type = 'snu', ds_factor = 1, scale_resolution = 128, sampling_rate = 200):
         self.ratio_type_1 = [5,4,3,2]
         self.ratio_type_2 = [0.05,0.05,0.05,0.05]
         self.ratio_type_3 = [5,6,7,8]
@@ -90,7 +96,9 @@ class ViTGenerator_one_channel(Sequence):
         self.data_type = data_type
         self.scale_resolution = scale_resolution
         self.sampling_rate = sampling_rate
-        self.manual_channels = ['FP1-F7','F7-T7','FP2-F8','F8-T8']
+        self.manual_channels = ['FP1-F7','F7-T7']
+        #self.manual_channels = ['FP1-F7']
+        self.ds_factor = ds_factor
 
         self.iden_mat = np.eye(2)
 
@@ -101,18 +109,7 @@ class ViTGenerator_one_channel(Sequence):
                                                          int(self.batch_size/len(self.manual_channels)))
     def on_epoch_end(self):
         self.epoch += 1
-        if self.epoch/self.update_period < 4:
-            self.ratio_idx = int(self.epoch/self.update_period)
-        else:
-            self.ratio_idx = 3
         self.ratio_idx = 0
-        self.batch_set, self.batch_num = updateDataSet (self.type_1_len,
-                                                        self.type_2_len,
-                                                        self.type_3_len, 
-                                                        [self.ratio_type_1[self.ratio_idx], 
-                                                         self.ratio_type_2[self.ratio_idx], 
-                                                         self.ratio_type_3[self.ratio_idx]], 
-                                                         int(self.batch_size/len(self.manual_channels)))
     def __len__(self):
         return self.batch_num
     
@@ -142,7 +139,8 @@ class ViTGenerator_one_channel(Sequence):
         batch_concat, type_1_seg, type_2_seg, type_3_seg = self.NotNoneBatch(idx)
         raw_batch = Segments2Data(batch_concat, manual_channels=self.manual_channels)
         raw_batch.shape = (raw_batch.shape[0]*raw_batch.shape[1],raw_batch.shape[2])
-        x_batch = PreProcessing.SegmentsCWT(raw_batch, sampling_rate = self.sampling_rate, scale_resolution = self.scale_resolution)
+        x_batch = np.array(PreProcessing.SegmentsCWT(raw_batch, sampling_rate = self.sampling_rate, scale_resolution = self.scale_resolution))
+        x_batch = x_batch[:,:,::self.ds_factor]
                 
         x_batch = np.expand_dims(x_batch, axis = -1)
 
@@ -162,15 +160,58 @@ class ViTGenerator_one_channel(Sequence):
 class AutoEncoderGenerator(ViTGenerator_one_channel):
     def __init__(self,type_1_data=[], type_2_data=[], type_3_data=[], batch_size=500, data_type = 'snu'):
         super().__init__(type_1_data, type_2_data, type_3_data, batch_size, data_type)
-        self.manual_channels = ['FP1-F7']
+        #self.manual_channels = ['FP1-F7']
+
+    def on_epoch_end(self):
+        self.batch_set, self.batch_num = updateDataSet( self.type_1_len,
+                                                        self.type_2_len, 
+                                                        self.type_3_len, 
+                                                        [self.ratio_type_1[0], self.ratio_type_2[0],self.ratio_type_3[0]], 
+                                                         int(self.batch_size/len(self.manual_channels)))
 
     def __getitem__(self, idx):
         batch_concat, type_1_seg, type_2_seg, type_3_seg = self.NotNoneBatch(idx)
-        raw_batch = Segments2Data(batch_concat, manual_channels=self.manual_channels)
-        raw_batch.shape = (raw_batch.shape[0]*raw_batch.shape[1],raw_batch.shape[2])
-        x_batch = np.expand_dims(x_batch, axis = -1)
+        raw_batch = Segments2Data(batch_concat, type = self.data_type)
+        #raw_batch.shape = (raw_batch.shape[0]*raw_batch.shape[1],1,raw_batch.shape[2])
+        x_batch = np.expand_dims(raw_batch, axis = -1)
+        #x_batch = tf.keras.layers.Rescaling(scale=1./127.5, offset=-1)(x_batch)
+        x_batch = x_batch / 50
+        
 
         return x_batch, x_batch
+    
+class Singal2FullGenerator(ViTGenerator_one_channel):
+    def __init__(self, full_ch_model, type_1_data=[], type_2_data=[], type_3_data=[], batch_size=500, data_type = 'snu'):
+        super().__init__(type_1_data, type_2_data, type_3_data, batch_size, data_type)
+        self.full_ch_encoder = copy.deepcopy(full_ch_model)
+        if data_type == 'chb_one_ch' : data_type = 'chb'
+        if data_type == 'snu_one_ch' : data_type = 'snu'
+        #self.manual_channels = ['FP1-F7']
+
+    def on_epoch_end(self):
+        self.batch_set, self.batch_num = updateDataSet( self.type_1_len,
+                                                        self.type_2_len, 
+                                                        self.type_3_len, 
+                                                        [self.ratio_type_1[0], self.ratio_type_2[0],self.ratio_type_3[0]], 
+                                                         int(self.batch_size/len(self.manual_channels)))
+
+    def __getitem__(self, idx):
+        batch_concat, type_1_seg, type_2_seg, type_3_seg = self.NotNoneBatch(idx)
+        full_channel_batch = Segments2Data(batch_concat, type = self.data_type)
+        
+        
+        #raw_batch.shape = (raw_batch.shape[0]*raw_batch.shape[1],1,raw_batch.shape[2])
+        full_channel_batch = np.expand_dims(full_channel_batch, axis = -1) # (batch, 18, 1000, 1)
+        full_channel_batch = full_channel_batch / 50
+        single_channel_batch = full_channel_batch[:,0,:,:] # (batch, 1000, 1)
+
+        x_batch = np.expand_dims(single_channel_batch, axis = -3)
+        y_batch = self.full_ch_encoder.predict_on_batch(full_channel_batch)
+        
+        #x_batch = tf.keras.layers.Rescaling(scale=1./127.5, offset=-1)(x_batch)
+        
+
+        return x_batch, y_batch
 
 class ViTGenerator_full_channel(Sequence):
     def __init__(self,type_1_data=[], type_2_data=[], type_3_data=[], batch_size=500, data_type = 'snu', scale_resolution = 128, sampling_rate = 200):

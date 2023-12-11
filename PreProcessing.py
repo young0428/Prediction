@@ -28,7 +28,7 @@ def FilteringSegments(segments):
     for batch in segments:
         fft_seg = []
         for one_ch_signal in batch:
-            fft_seg.append(BandPassfiltering(signal=one_ch_signal, bandwidth=[0.1, 50], sr=128))
+            fft_seg.append(BandPassfiltering(signal=one_ch_signal, bandwidth=[0.1, 30], sr=200))
         y_batch.append(fft_seg)
     y_batch = np.array(y_batch)
     return y_batch

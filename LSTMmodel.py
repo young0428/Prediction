@@ -7,13 +7,13 @@ import numpy as np
 from keras import Sequential
 
 def LSTMLayer(inputs,cell_num = 20):
-    #inputs = (batch, 80, 30)
-    x = Bidirectional(LSTM(cell_num, dropout = 0.1, recurrent_dropout=0.5))(inputs)
+    x = Bidirectional(LSTM(cell_num, recurrent_dropout=0.5))(inputs)
+    x = Dropout(0.2)(x)
     x = Dense(1,activation='sigmoid')(x)
 
     return x
 
-# inputs = Input(shape=(10,64,21))
+# inputs = Input(shape=(125,16))
 # la = LSTMLayer(inputs)
 # model = Model(inputs = inputs, outputs=la)
 

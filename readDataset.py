@@ -113,13 +113,13 @@ def FilteringByChannel(intervals, edf_path, type):
 
 def MakeValidationIntervalSet(patient_specific_intervals):
     true_state = ['preictal_ontime', 'preictal_late', 'preictal_early', 'ictal']
-    false_state =['interictal','postictal']
+    false_state =['interictal']
     start_idx = -1
     end_idx = -1
     start_time = -1
     end_time = -1
     train_val_set = []
-    t3_period = 1800
+    t3_period = 3600
 
     for idx, interval in enumerate(patient_specific_intervals):
         if interval[3] in true_state:
@@ -246,7 +246,7 @@ def Segments2Data(segments, type='snu', manual_channels=None):
                     'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4',
                     'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
                     'P8-O2', 'FZ-CZ', 'CZ-PZ']
-    channels_snu_one = ['Fp1-AVG']
+    channels_snu_one = ['Fp1-Avg']
     channels_chb_one = ['FP1-F7']
     if type == 'snu':
         channels = channels_snu
@@ -277,7 +277,7 @@ def Segments2Data(segments, type='snu', manual_channels=None):
         labels = f.getSignalLabels()
         
         if not all([channel in labels for channel in channels]):
-            print(segment)
+            
             f.close()
             continue
 
@@ -286,8 +286,8 @@ def Segments2Data(segments, type='snu', manual_channels=None):
             read_start = float(segment[1])
             read_end = 0
         # 최근 세그먼트의 start+window_size 값보다 read_end 값이 작으면 (읽는 끝값) read_end 값 갱신
-        if read_end < float(segment[1]) + float(segment[2]):
-            read_end = float(segment[1]) + float(segment[2])
+        
+        read_end = float(segment[1]) + float(segment[2])
         interval_sets.append([float(segment[1])-read_start, float(segment[1])+float(segment[2])-read_start ])
 
         if not idx+1 >= len(segments) :
@@ -309,7 +309,7 @@ def Segments2Data(segments, type='snu', manual_channels=None):
         
         for channel in channels:
             ch_idx = labels.index(channel)
-            signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*(read_end-read_start)))
+            signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*float(segment[2])))
             #128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
             if not freq[ch_idx] == target_sampling_rate:
                 signal = resample(signal, int(float(segment[2]) * target_sampling_rate ))
@@ -350,9 +350,11 @@ def updateDataSet(type_1_len, type_2_len, type_3_len, portion, batch_size):
     
 
     if (type_1_sample_num+type_2_sample_num+type_3_sample_num) < batch_size :
-        type_1_sample_num += int(batch_size/2)
-        type_3_sample_num += int(batch_size/2)
+        type_1_sample_num += int(batch_size)
+        type_3_sample_num += int(batch_size)
     
+    type_1_sample_num = min(type_1_len, type_1_sample_num)
+    type_3_sample_num = min(type_3_len, type_3_sample_num)
     batch_num = int((type_1_sample_num+type_2_sample_num+type_3_sample_num)/batch_size)
 
     # Sampling mask 생성

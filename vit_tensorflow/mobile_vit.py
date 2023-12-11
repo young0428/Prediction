@@ -94,7 +94,7 @@ def mobilevit_block(x, patch_shape, num_blocks, projection_dim, strides=1):
     non_overlapping_patches = layers.Reshape((num_patches, patch_size, projection_dim))(
         non_overlapping_patches
     )
-    #non_overlapping_patches = tf.transpose(non_overlapping_patches, [0,2,1,3])
+    non_overlapping_patches = tf.transpose(non_overlapping_patches, [0,2,1,3])
     global_features = transformer_block(
         non_overlapping_patches, num_blocks, projection_dim
     )
@@ -167,6 +167,8 @@ def one_channel_mobile_vit(image_size, patch_shape = (2,2)):
 
     # Classification head.
     x = layers.GlobalAvgPool2D()(x)
+    x = layers.Dropout(0.1)(x)
+    x = layers.Dense(512, activation=tf.nn.gelu)(x)
     x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(2, activation="softmax")(x)
 

@@ -18,6 +18,7 @@ import AutoEncoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
 from ModelGenerator import FullModel_generator
+from dilationmodel import *
 
 
 tf.get_logger().setLevel('ERROR')
@@ -30,12 +31,12 @@ if gpus:
 
 # %%
 def train(model_name, encoder_model_name, data_type = 'snu'):
-    window_size = 5
-    overlap_sliding_size = 2
+    window_size = 2
+    overlap_sliding_size = 0.5
     normal_sliding_size = window_size
-    sr = 128
+    sr = 200
     epochs = 100
-    batch_size = 300
+    batch_size = 800
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
@@ -95,13 +96,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
         test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
         edf_file_path = "/host/d/CHB"
 
-        aemodel = tf.keras.models.load_model(autoencoder_model_path)
-
-        encoder_inputs = aemodel.input
-        encoder_last_layer = get_first_name_like_layer(aemodel, 'squeeze')
-        encoder_output = encoder_last_layer.output
-        encoder_model = Model(inputs = encoder_inputs, outputs = encoder_output)
-        encoder_model.trainable = False
+        
 
     elif data_type=='snu_one_ch':
         train_info_file_path = "/host/d/SNU_DATA/patient_info_snu_train.csv"
@@ -176,10 +171,11 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
             val_type_1 = np.array(val_segments_set['preictal_ontime'])
             val_type_3 = np.array(val_segments_set['interictal'])
             
-            lstm_output = LSTMLayer(encoder_output, 20)
-            full_model = Model(inputs=encoder_inputs, outputs=lstm_output)
+            inputs = Input(shape=(1,int(window_size*sr)))
+            dilation_output = dilationnet(inputs)
+            full_model = Model(inputs=inputs, outputs=dilation_output)
 
-            checkpoint_path = f"./LSTM/{model_name}/{patient_name}/set{idx+1}/cp.ckpt"
+            checkpoint_path = f"./Dilation/{model_name}/{patient_name}/set{idx+1}/cp.ckpt"
             checkpoint_dir = os.path.dirname(checkpoint_path)
 
             if not os.path.exists(checkpoint_dir):
@@ -191,21 +187,25 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                     line = f.readline()
                     if line == '1':
                         print(f"{patient_name}, set{idx+1} training already done!!")
-                        with open(f'./LSTM/{model_name}/{patient_name}/set{idx+1}/ValResults', 'rb') as file_pi:
+                        with open(f'{checkpoint_dir}/ValResults', 'rb') as file_pi:
                             result_list = pickle.load(file_pi)
                             print(f'set{idx+1} Sensitivity : {result_list[2]}   FPR : {result_list[3]}')
                             patient_sens_sum += result_list[2]
                             patient_fpr_sum += result_list[3]
                         continue
 
-            full_model.compile(optimizer = 'RMSprop',
+            full_model.compile(optimizer = 'Adam',
                                 metrics=[
                                         # tf.keras.metrics.BinaryAccuracy(threshold=0),
                                         # tf.keras.metrics.Recall(thresholds=0)
-                                        tf.keras.metrics.BinaryAccuracy(threshold=0.5),
-                                        tf.keras.metrics.Recall(thresholds=0.5)
+                                        # tf.keras.metrics.BinaryAccuracy(threshold=0),
+                                        # tf.keras.metrics.Recall(thresholds=0)
+                                        tf.keras.metrics.CategoricalAccuracy(),
+                                        tf.keras.metrics.Recall(class_id=1),
                                         ] ,
-                                loss=tf.keras.losses.BinaryCrossentropy(label_smoothing=0.05) )
+                                #loss=tf.keras.losses.BinaryCrossentropy(label_smoothing=0.05) 
+                                loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.05)
+                                )
 
             if os.path.exists(checkpoint_path):
                 print("Model Loaded!")
@@ -217,10 +217,12 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                                                             histogram_freq = 1,
                                                             profile_batch = '100,200')
             
-            early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_binary_accuracy', 
+            early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_categorical_accuracy', 
                                                                 verbose=0,
+                                                                min_delta=0.01,
                                                                 patience=10,
-                                                                restore_best_weights=False)
+                                                                mode='max',
+                                                                restore_best_weights=True)
             
             backup_callback = tf.keras.callbacks.BackupAndRestore(
             f"{checkpoint_dir}/training_backup",
@@ -230,7 +232,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
             # Create a callback that saves the model's weights
             cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
                                                             save_best_only=True,
-                                                            monitor='val_binary_accuracy',
+                                                            monitor='val_categorical_accuracy',
                                                             verbose=0)
             
             # %%
@@ -250,10 +252,12 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                         validation_data = validation_generator,
                         use_multiprocessing=True,
                         workers=28,
-                        max_queue_size=30,
+                        max_queue_size=80,
                         callbacks= [  cp_callback, early_stopping, backup_callback ]
             )
 
+            del full_model
+            del dilation_output
             matrix, postprocessed_matrix, sens, fpr, seg_results = TestFullModel_specific.validation(checkpoint_path, val_intervals, data_type, 20,16, window_size)
             patient_sens_sum += sens
             patient_fpr_sum += fpr
@@ -267,9 +271,9 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
 
             with open(f'{checkpoint_dir}/training_done','w') as f:
                 f.write('1')
-            with open(f'./LSTM/{model_name}/{patient_name}/set{idx+1}/trainHistoryDict', 'wb') as file_pi:
+            with open(f'{checkpoint_dir}/trainHistoryDict', 'wb') as file_pi:
                 pickle.dump(history.history, file_pi)
-            with open(f'./LSTM/{model_name}/{patient_name}/set{idx+1}/ValResults', 'wb') as file_pi:
+            with open(f'{checkpoint_dir}/ValResults', 'wb') as file_pi:
                 pickle.dump(result_list, file_pi)
 
             
@@ -278,8 +282,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
             SaveAsHeatmap(postprocessed_matrix, f"{checkpoint_dir}/tf_matrix.png" )   
             plt.clf()
 
-            del full_model
-            del lstm_output
+           
         total_sens_sum += patient_sens_sum
         total_fpr_sum += patient_fpr_sum
         print(f'Total          Avg,         Sensitivity : {total_sens_sum/(patient_idx+1)} FPR : {total_fpr_sum/(patient_idx+1)}/h')

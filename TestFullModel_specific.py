@@ -16,7 +16,7 @@ from tensorflow.keras.utils import Sequence
 from operator import itemgetter, attrgetter
 
 
-from readDataset import LoadDataset, Interval2Segments, Segments2Data, MakePath
+from readDataset import LoadDataset, Interval2Segments, Segments2Data, MakePath, IntervalList2Dict
 from AutoEncoder import FullChannelEncoder, FullChannelDecoder
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
@@ -36,7 +36,7 @@ class ValidatonTestData :
         self.interval_sets = interval_sets
         self.which_data = which_data
         self.full_signal = []
-        self.target_sr = 128
+        self.target_sr = 200
         self.duration = 0
         self.alarm_interval = 10
         self.cat_num = 2
@@ -72,8 +72,8 @@ class ValidatonTestData :
         return patient_name_list
 
     def IntervalSorting(self, interval_sets):
-        state_list = ['preictal_ontime', 'preictal_late','interictal']
-        self.state_dict = {'preictal_ontime':1, 'ictal':0, 'preictal_late':1, 'preictal_early':0, 'postictal':0,'interictal':0}
+        state_list = ['preictal_ontime','interictal']
+        self.state_dict = {'preictal_ontime':1, 'interictal':0}
         temp = []
         self.intervals_state = []
         for state in state_list:
@@ -112,8 +112,9 @@ class ValidatonTestData :
             self.full_signal = np.array(self.full_signal)
     def MakeSegments(self, sorted_interval):
         # segment = [start, duration]
-        self.sliding_size = self.alarm_interval / self.k
+        self.sliding_size = self.window_size
         start_gap = max(0, self.window_size - self.sliding_size)
+        time_for_k_of_n = self.sliding_size * self.k + start_gap
         # inverval = [환자명, start, end, state_label]
         self.segments = []
         self.labels = []
@@ -121,10 +122,10 @@ class ValidatonTestData :
         for interval in sorted_interval :
             time = interval[1] # start
             while not (time + start_gap + self.alarm_interval > interval[2]) : # end
-                self.segments.append([ MakePath(interval[0],self.edf_file_path) ,time, start_gap + self.alarm_interval, interval[4]])  # segment = [start, duration]
+                self.segments.append([ MakePath(interval[0],self.edf_file_path) ,time, time_for_k_of_n, interval[4]])  # segment = [start, duration]
                 self.labels.append(interval[3])
                 self.segments_state.append(interval[4])
-                time += self.sliding_size 
+                time += self.alarm_interval
         self.segments = np.array(self.segments)
         self.labels = np.array(self.labels)
     # 전체 segments를 batch_size로 나눔 
@@ -145,6 +146,7 @@ class ValidatonTestData :
         for seg_idx, segment in enumerate(segments):
             signal = Segments2Data([segment],self.which_data)
             signal = signal[0]
+            #signal /= 50
             start_idx = 0
             sample_num = int(self.target_sr * self.window_size)
             sliding_num = int(self.target_sr * self.sliding_size)
@@ -153,14 +155,18 @@ class ValidatonTestData :
                 self.batch_x.append(signal[:,s:s+sample_num])
                 self.true.append(labels[seg_idx])
                 self.results.append([segment[0], float(segment[1]) + j*self.sliding_size,self.window_size, segment[3]])
+                
     # 생성된 배칭에 대해 예측 수행
     def Predict(self):
         
         self.batch_x = np.expand_dims(self.batch_x,axis=-1)
         self.predict = self.model.predict_on_batch(self.batch_x)
-        self.pred_cat = ((tf.squeeze(tf.round(self.predict))).numpy()).astype(int).tolist()
+        #self.pred_cat = ((tf.squeeze(tf.round(self.predict))).numpy()).astype(int).tolist()
+        self.pred_cat = tf.argmax(self.predict, axis=1).numpy().astype(int).tolist()
+        
         for idx, segment in enumerate(self.results):
             self.results[idx] += [self.true[idx], self.pred_cat[idx]]
+            
             self.seg_res.append(self.results[idx])
 
     # K of N을 적용해서 alarm 울림 (1), alarm 안울림 (0) 결정
@@ -195,11 +201,11 @@ class ValidatonTestData :
             self.tf_matrix[self.true_k_of_n[idx],self.pred_k_of_n[idx]] += 1 
 
     def Calc(self):
-        if  not (self.tf_matrix[1,0] + self.tf_matrix[1,1]) == 0:
-            sensitivity = self.tf_matrix[1,1] / (self.tf_matrix[1,0] + self.tf_matrix[1,1])
+        if  not (self.matrix[1,0] + self.matrix[1,1]) == 0:
+            sensitivity = self.matrix[1,1] / (self.matrix[1,0] + self.matrix[1,1])
         else:
             sensitivity = 0
-        false_alarm_rate =  self.tf_matrix[0,1] * ( 3600 / ((self.tf_matrix[0,0] + self.tf_matrix[0,1]) * self.alarm_interval))
+        false_alarm_rate =  self.matrix[0,1] / ((self.matrix[0,0] + self.matrix[0,1]))
         return sensitivity, false_alarm_rate
     
     def SetKN(self,k,n):
@@ -211,33 +217,33 @@ class ValidatonTestData :
         return self.edf_file_path+'/'+(patient_name.split('_'))[0]+'/'+patient_name+'.edf'
 
 #%%
-lstm_model_name = "patient_specific_chb_DCAE_LSTM_inter_gap_7200"
-patient_name = "SNU003"
-idx = 0
-checkpoint_path = f"./LSTM/{lstm_model_name}/{patient_name}/set{idx+1}/cp.ckpt"
-interval_sets = [['SNU003', 33795, 35595, 'interictal'], ['SNU003', 4111, 5791, 'preictal_early'], ['SNU003', 5791, 7591, 'preictal_ontime'], ['SNU003', 7591, 7711, 'preictal_late'], ['SNU003', 7711, 7727, 'ictal']]
-interval_sets = IntervalList2Dict(interval_sets)
-def validation(checkpoint_path, test_interval_set, data_type,k,n):
-    window_size = 5
+# lstm_model_name = "one_ch_chb_dilation_model"
+# patient_name = "CHB001"
+# idx = 0
+# checkpoint_path = f"./Dilation/{lstm_model_name}/{patient_name}/set{idx+1}/cp.ckpt"
+# interval_sets = [['CHB001_07', 1473, 3273, 'interictal'], ['CHB001_02', 3003, 3600, 'preictal_early'], ['CHB001_03', 0, 1076, 'preictal_early'], ['CHB001_03', 1076, 2876, 'preictal_ontime'], ['CHB001_03', 2876, 2996, 'preictal_late'], ['CHB001_03', 2996, 3036, 'ictal']]
+# interval_sets = IntervalList2Dict(interval_sets)
+def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size):
+    window_size = 2
     overlap_sliding_size = 1
     normal_sliding_size = 1
     test_batch_size = 100
 
-    state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
     #lstm_model_name = "paper_base_rawEEG_categorical"
-    if data_type == 'snu':
+    if data_type == 'snu' or data_type == 'snu_one_ch':
         # test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
         # edf_file_path = "/host/d/SNU_DATA"
         test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
         edf_file_path = "/host/d/SNU_DATA"
-    else:
+    elif data_type == 'chb' or data_type == 'chb_one_ch':
         # test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
         # edf_file_path = "/host/d/CHB"
 
         test_info_file_path = "/home/CHB/patient_info_chb_test.csv"
         edf_file_path = "/host/d/CHB"
+    
 
 
 
@@ -250,7 +256,7 @@ def validation(checkpoint_path, test_interval_set, data_type,k,n):
     sens,fpr = val_object.Calc()
     return val_object.matrix, val_object.tf_matrix, sens, fpr, val_object.seg_res
 
-#validation(checkpoint_path, interval_sets, "snu",5,3)
+#validation(checkpoint_path, interval_sets, "chb_one_ch",20,16,2)
 
 def SaveAsHeatmap(matrix, path):
     sns.heatmap(matrix,annot=True, cmap='Blues')
