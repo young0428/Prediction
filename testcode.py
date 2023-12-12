@@ -4,14 +4,13 @@ from ModelGenerator import FullModel_generator
 import os
 import pickle
 
-encoder_model_name = "autoencoder_for_snu_patient_62_32_no_last_activation"
-model_name = "one_channel_patient_specific_snu_DCAE_LSTM_62_32"
+model_name = "one_ch_chb_dilation_model"
 
-train_info_file_path = "/host/d/SNU_DATA/patient_info_snu_train.csv"
-test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
-edf_file_path = "/host/d/SNU_DATA"
+train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
+test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
+edf_file_path = "/host/d/CHB"
 
-data_type = 'snu_one_ch'
+data_type = 'chb_one_ch'
 
 
 #%%
@@ -44,35 +43,44 @@ for patient_idx, patient_name in enumerate(filtered_interval_dict.keys()) :
     patient_sens_sum = 0
     patient_fpr_sum = 0
     set_num = 0
+    
     for idx, set in enumerate(train_val_sets):
 
-        checkpoint_path = f"./LSTM/{model_name}/{patient_name}/set{idx+1}/cp.ckpt"
+        checkpoint_path = f"./Dilation/{model_name}/{patient_name}/set{idx+1}/cp.ckpt"
         checkpoint_dir = os.path.dirname(checkpoint_path)
 
-        
+        if not os.path.exists(checkpoint_dir):
+            print(idx, "pass")
+            continue
         with open(f'{checkpoint_dir}/training_done','r') as f:
             line = f.readline()
             if line == '1':
-                with open(f'./LSTM/{model_name}/{patient_name}/set{idx+1}/ValResults', 'rb') as file_pi:
+                with open(f'{checkpoint_dir}/ValResults', 'rb') as file_pi:
                     result_list = pickle.load(file_pi)
                     matrix = result_list[0]
-                    acc = (matrix[0][0] + matrix[1][1]) / (matrix[0][0]+matrix[0][1]+matrix[1][0]+matrix[1][1])
-                    sens = matrix[1][1] / (matrix[1][0] + matrix[1][1])
-                    fpr = matrix[0][1] / (matrix[0][0] + matrix[0][1])
+                    
+                    tn = matrix[0][0]
+                    fp = matrix[0][1]
+                    fn = matrix[1][0]
+                    tp = matrix[1][1]
+
+                    acc = (tp + tn) / (tp + tn +fp + fn)
+                    sens = tp / (fn + tp)
+                    fpr = fp / (tn + fp)
                     print("%s set%d, Acc : %.2f%% , Sens : %.2f%%, FPR : %.3f"%(patient_name, idx+1, acc*100, sens*100, fpr))
                     patient_acc_sum += acc
                     patient_sens_sum += sens
                     patient_fpr_sum += fpr
                     set_num += 1
     
-
-    patient_avg_acc = patient_acc_sum / set_num
-    patient_avg_sens = patient_sens_sum / set_num
-    patient_avg_fpr = patient_fpr_sum / set_num
-    patient_info_list.append((patient_name, patient_avg_acc*100, patient_avg_sens*100, patient_avg_fpr))
-    print('-------------------------------')
-    print('Patient %s Avg   Acc : %.2f%%, Sens : %.2f%%, FPR : %.3f'%(patient_name, patient_avg_acc*100, patient_avg_sens*100, patient_avg_fpr))
-    print('-------------------------------')
+    if set_num > 0:
+        patient_avg_acc = patient_acc_sum / set_num
+        patient_avg_sens = patient_sens_sum / set_num
+        patient_avg_fpr = patient_fpr_sum / set_num
+        patient_info_list.append((patient_name, patient_avg_acc*100, patient_avg_sens*100, patient_avg_fpr))
+        print('-------------------------------')
+        print('Patient %s Avg   Acc : %.2f%%, Sens : %.2f%%, FPR : %.3f'%(patient_name, patient_avg_acc*100, patient_avg_sens*100, patient_avg_fpr))
+        print('-------------------------------')
 
     total_acc_sum += patient_avg_acc
     total_sens_sum += patient_avg_sens

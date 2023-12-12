@@ -81,7 +81,26 @@ def dilationnet(inputs: Input):
     # output
     concat_layers = tf.concat(after_dilation, axis=-1)
     x = concat_layers
-    x = layers.Dropout(0.2)(x)
-    x = layers.Dense(2, activation='softmax')(x)
+    #x = layers.Dropout(0.2)(x)
+    #x = layers.Dense(2, activation='softmax')(x)
+    
+
     #x = layers.Dense(2,activation='softmax')(x)
     return x
+
+#(None, 1, data_num)
+def td_net(inputs,splited_window_size = 2, sampling_rate= 200):
+
+    dilation_net_input = Input(shape=(1,splited_window_size*sampling_rate))
+    dilation_layer = dilationnet(dilation_net_input)
+    dilation_model = Model(inputs = dilation_net_input, outputs = dilation_layer)
+
+    splited_input = layers.Reshape((int(inputs.shape[2]/(splited_window_size*sampling_rate)), 1, splited_window_size*sampling_rate))(inputs)
+
+    x = layers.TimeDistributed(dilation_model)(splited_input)
+    x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(20))(x)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(2, activation='softmax')(x)
+
+    return x
+

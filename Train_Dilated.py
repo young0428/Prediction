@@ -17,8 +17,9 @@ from readDataset import *
 import AutoEncoder 
 from LSTMmodel import LSTMLayer
 from sklearn.model_selection import KFold
-from ModelGenerator import FullModel_generator
+from ModelGenerator import *
 from dilationmodel import *
+from vit_tensorflow.mobile_vit import one_channel_mobile_vit
 
 
 tf.get_logger().setLevel('ERROR')
@@ -31,12 +32,12 @@ if gpus:
 
 # %%
 def train(model_name, encoder_model_name, data_type = 'snu'):
-    window_size = 2
-    overlap_sliding_size = 0.5
+    window_size = 120
+    overlap_sliding_size = 10
     normal_sliding_size = window_size
     sr = 200
     epochs = 100
-    batch_size = 800
+    batch_size = 50
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
@@ -94,7 +95,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
     elif data_type=='chb_one_ch':
         train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
         test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
-        edf_file_path = "/host/d/CHB"
+        edf_file_path = "/home/CHB"
 
         
 
@@ -171,8 +172,15 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
             val_type_1 = np.array(val_segments_set['preictal_ontime'])
             val_type_3 = np.array(val_segments_set['interictal'])
             
+            # scale_rate = 128
+            # downsampling_factor = 2
+            # patch_shape = (2,2)
+            # full_model = one_channel_mobile_vit(
+            #     image_size = (scale_rate, int(window_size * sr / downsampling_factor), 1),
+            #     patch_shape = patch_shape
+            # )
             inputs = Input(shape=(1,int(window_size*sr)))
-            dilation_output = dilationnet(inputs)
+            dilation_output = td_net(inputs)
             full_model = Model(inputs=inputs, outputs=dilation_output)
 
             checkpoint_path = f"./Dilation/{model_name}/{patient_name}/set{idx+1}/cp.ckpt"
@@ -204,7 +212,7 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                                         tf.keras.metrics.Recall(class_id=1),
                                         ] ,
                                 #loss=tf.keras.losses.BinaryCrossentropy(label_smoothing=0.05) 
-                                loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.05)
+                                loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1)
                                 )
 
             if os.path.exists(checkpoint_path):
@@ -217,12 +225,15 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                                                             histogram_freq = 1,
                                                             profile_batch = '100,200')
             
-            early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_categorical_accuracy', 
+            # early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_categorical_accuracy', 
+            #                                                     verbose=0,
+            #                                                     patience=7,
+            #                                                     mode='max',
+            #                                                     )
+            early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', 
                                                                 verbose=0,
-                                                                min_delta=0.01,
-                                                                patience=10,
-                                                                mode='max',
-                                                                restore_best_weights=True)
+                                                                patience=7,
+                                                                )
             
             backup_callback = tf.keras.callbacks.BackupAndRestore(
             f"{checkpoint_dir}/training_backup",
@@ -236,6 +247,23 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
                                                             verbose=0)
             
             # %%
+
+            # train_generator = ViTGenerator_one_channel(type_1_data = train_type_1, 
+            #                             type_3_data = train_type_3,
+            #                             batch_size = batch_size,
+            #                             data_type = data_type,
+            #                             scale_resolution = scale_rate,
+            #                             sampling_rate=sr,
+            #                             ds_factor=downsampling_factor
+            #                             )
+            # validation_generator = ViTGenerator_one_channel(type_1_data = val_type_1,
+            #                                     type_3_data = val_type_3, 
+            #                                     batch_size = batch_size,
+            #                                     data_type = data_type,
+            #                                     scale_resolution = scale_rate,
+            #                                     sampling_rate=sr,
+            #                                     ds_factor=downsampling_factor
+            #                                     )
             
             train_generator = FullModel_generator(type_1_data = train_type_1,
                                                   type_3_data = train_type_3,
@@ -257,8 +285,8 @@ def train(model_name, encoder_model_name, data_type = 'snu'):
             )
 
             del full_model
-            del dilation_output
-            matrix, postprocessed_matrix, sens, fpr, seg_results = TestFullModel_specific.validation(checkpoint_path, val_intervals, data_type, 20,16, window_size)
+            #del dilation_output
+            matrix, postprocessed_matrix, sens, fpr, seg_results = TestFullModel_specific.validation(checkpoint_path, val_intervals, data_type, 5,3, window_size=window_size)
             patient_sens_sum += sens
             patient_fpr_sum += fpr
             result_list = [matrix, postprocessed_matrix, sens, fpr, seg_results]

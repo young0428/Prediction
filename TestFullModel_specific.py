@@ -60,7 +60,7 @@ class ValidatonTestData :
             sens, far = self.Calc()
             print(f'\rTest Progress {"%.2f"%((idx+1)/len(batch_idx_seq)*100)}% ({idx+1}/{len(batch_idx_seq)})   Sensitivity : {"%.2f"%(sens*100)}    FAR : {"%.4f"%(far)}', end='')
         
-            print("")
+        print("")
 
     def GetPatientName(self, intervals):
         patient_name_list = []
@@ -217,17 +217,11 @@ class ValidatonTestData :
         return self.edf_file_path+'/'+(patient_name.split('_'))[0]+'/'+patient_name+'.edf'
 
 #%%
-# lstm_model_name = "one_ch_chb_dilation_model"
-# patient_name = "CHB001"
-# idx = 0
-# checkpoint_path = f"./Dilation/{lstm_model_name}/{patient_name}/set{idx+1}/cp.ckpt"
-# interval_sets = [['CHB001_07', 1473, 3273, 'interictal'], ['CHB001_02', 3003, 3600, 'preictal_early'], ['CHB001_03', 0, 1076, 'preictal_early'], ['CHB001_03', 1076, 2876, 'preictal_ontime'], ['CHB001_03', 2876, 2996, 'preictal_late'], ['CHB001_03', 2996, 3036, 'ictal']]
-# interval_sets = IntervalList2Dict(interval_sets)
+
 def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size):
-    window_size = 2
     overlap_sliding_size = 1
     normal_sliding_size = 1
-    test_batch_size = 100
+    test_batch_size = 10
 
 
     # for WSL
@@ -236,13 +230,13 @@ def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size):
         # test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
         # edf_file_path = "/host/d/SNU_DATA"
         test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
-        edf_file_path = "/host/d/SNU_DATA"
+        edf_file_path = "/home/SNU_DATA"
     elif data_type == 'chb' or data_type == 'chb_one_ch':
         # test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
         # edf_file_path = "/host/d/CHB"
 
         test_info_file_path = "/home/CHB/patient_info_chb_test.csv"
-        edf_file_path = "/host/d/CHB"
+        edf_file_path = "/home/CHB"
     
 
 
@@ -254,9 +248,16 @@ def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size):
     # %%
     val_object.start(k,n)
     sens,fpr = val_object.Calc()
+    del fullmodel
     return val_object.matrix, val_object.tf_matrix, sens, fpr, val_object.seg_res
+# lstm_model_name = "one_ch_dilation_lstm"
+# window_size = 120
+# patient_name = "CHB001"
+# idx = 0
+# checkpoint_path = f"./Dilation/{lstm_model_name}/{patient_name}/set{idx+1}/cp.ckpt"
+# interval_sets = [['CHB001_07', 1473, 3273, 'interictal'], ['CHB001_02', 3003, 3600, 'preictal_early'], ['CHB001_03', 0, 1076, 'preictal_early'], ['CHB001_03', 1076, 2876, 'preictal_ontime'], ['CHB001_03', 2876, 2996, 'preictal_late'], ['CHB001_03', 2996, 3036, 'ictal']]
+# interval_sets = IntervalList2Dict(interval_sets)
 
-#validation(checkpoint_path, interval_sets, "chb_one_ch",20,16,2)
 
 def SaveAsHeatmap(matrix, path):
     sns.heatmap(matrix,annot=True, cmap='Blues')

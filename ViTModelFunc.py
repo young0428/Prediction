@@ -154,11 +154,11 @@ def train(model_name, data_type = 'snu'):
         train_segments_set[state] = Interval2Segments(train_interval_set[state],edf_file_path, window_size, normal_sliding_size)
         test_segments_set[state] = Interval2Segments(test_interval_set[state],edf_file_path, window_size, normal_sliding_size)
 
-    train_type_1 = np.array(train_segments_set['preictal_ontime'] + train_segments_set['preictal_late'])
+    train_type_1 = np.array(train_segments_set['preictal_ontime'] )
     #train_type_2 = np.array(train_segments_set['ictal'])
     train_type_3 = np.array(train_segments_set['interictal'])
 
-    test_type_1 = np.array(test_segments_set['preictal_ontime'] + test_segments_set['preictal_late'] )
+    test_type_1 = np.array(test_segments_set['preictal_ontime'])
     #test_type_2 = np.array(test_segments_set['ictal'])
     test_type_3 = np.array(test_segments_set['interictal'])
 

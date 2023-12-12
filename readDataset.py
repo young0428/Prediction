@@ -247,7 +247,7 @@ def Segments2Data(segments, type='snu', manual_channels=None):
                     'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
                     'P8-O2', 'FZ-CZ', 'CZ-PZ']
     channels_snu_one = ['Fp1-Avg']
-    channels_chb_one = ['FP1-F7']
+    channels_chb_one = ['FP2-F8']
     if type == 'snu':
         channels = channels_snu
     elif type == 'chb':

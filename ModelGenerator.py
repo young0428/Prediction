@@ -96,7 +96,7 @@ class ViTGenerator_one_channel(Sequence):
         self.data_type = data_type
         self.scale_resolution = scale_resolution
         self.sampling_rate = sampling_rate
-        self.manual_channels = ['FP1-F7','F7-T7']
+        self.manual_channels = ['FP1-F7']
         #self.manual_channels = ['FP1-F7']
         self.ds_factor = ds_factor
 

@@ -19,10 +19,14 @@ from sklearn.model_selection import KFold
 from ModelGenerator import FullModel_generator
 from dilationmodel import *
 
-window_size = 2
-sr = 200
-inputs = Input(shape=(1,int(window_size*sr)))
-dilation_output = dilationnet(inputs)
-model = Model(inputs = inputs, outputs = dilation_output)
+window_size = 120
+splited_window_size = 2
+sampling_rate = 200
+
+
+inputs = Input(shape=(1, window_size * sampling_rate))
+ts_output = td_net(inputs, splited_window_size=splited_window_size, sampling_rate=sampling_rate)
+model = Model(inputs,ts_output)
 model.summary()
+
 # %%

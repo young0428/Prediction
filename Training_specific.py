@@ -9,7 +9,7 @@ if __name__ == "__main__":
     # # lstm_model_name = "one_channel_patient_specific_chb_DCAE_LSTM"
     data_type = 'chb_one_ch'
 
-    dilation_model_name = 'one_ch_chb_dilation_model'
+    dilation_model_name = 'one_ch_dilation_lstm_60sec'
     Train_Dilated.train(dilation_model_name,'',data_type)
     
     # #TrainAutoEncoder_paper.train(encoder_model_name, data_type)

@@ -94,7 +94,7 @@ def mobilevit_block(x, patch_shape, num_blocks, projection_dim, strides=1):
     non_overlapping_patches = layers.Reshape((num_patches, patch_size, projection_dim))(
         non_overlapping_patches
     )
-    non_overlapping_patches = tf.transpose(non_overlapping_patches, [0,2,1,3])
+    #non_overlapping_patches = tf.transpose(non_overlapping_patches, [0,2,1,3])
     global_features = transformer_block(
         non_overlapping_patches, num_blocks, projection_dim
     )
