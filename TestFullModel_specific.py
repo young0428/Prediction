@@ -28,7 +28,7 @@ import pyedflib
 
 
 class ValidatonTestData :
-    def __init__(self, interval_sets, window_size, model, batch_size, info_file_path, edf_file_path, which_data):
+    def __init__(self, interval_sets, window_size, model, batch_size, info_file_path, edf_file_path, which_data, channel):
         self.window_size = window_size
         self.model = model
         self.info_file_path = info_file_path
@@ -45,6 +45,7 @@ class ValidatonTestData :
         self.batch_size = batch_size
         self.patient_dict = {}
         self.seg_res = []
+        self.channel = channel
 
     def start(self,k,n):
         sorted_intervals = self.IntervalSorting(self.interval_sets) # [환자명, start, end, state_label]
@@ -107,12 +108,12 @@ class ValidatonTestData :
             for idx, channel in enumerate(channels_for_type[self.which_data]):
                 ch_idx = labels.index(channel)
                 edf_signal = f.readSignal(ch_idx)
-                # resampling하여 target_sr(128)로 다운 샘플링
+                # resampling하여 target_sr로 다운 샘플링
                 self.full_signal.append((resample(edf_signal, int(len(edf_signal) / freq[ch_idx] * self.target_sr )))) # (21, target_sr * file_duration)
             self.full_signal = np.array(self.full_signal)
     def MakeSegments(self, sorted_interval):
         # segment = [start, duration]
-        self.sliding_size = self.window_size
+        self.sliding_size = self.alarm_interval
         start_gap = max(0, self.window_size - self.sliding_size)
         time_for_k_of_n = self.sliding_size * self.k + start_gap
         # inverval = [환자명, start, end, state_label]
@@ -121,7 +122,7 @@ class ValidatonTestData :
         self.segments_state = []
         for interval in sorted_interval :
             time = interval[1] # start
-            while not (time + start_gap + self.alarm_interval > interval[2]) : # end
+            while not (time + time_for_k_of_n > interval[2]) : # end
                 self.segments.append([ MakePath(interval[0],self.edf_file_path) ,time, time_for_k_of_n, interval[4]])  # segment = [start, duration]
                 self.labels.append(interval[3])
                 self.segments_state.append(interval[4])
@@ -144,7 +145,7 @@ class ValidatonTestData :
         
         # segment = [filepath, start, duration]
         for seg_idx, segment in enumerate(segments):
-            signal = Segments2Data([segment],self.which_data)
+            signal = Segments2Data([segment],self.which_data, self.channel)
             signal = signal[0]
             #signal /= 50
             start_idx = 0
@@ -162,7 +163,8 @@ class ValidatonTestData :
         self.batch_x = np.expand_dims(self.batch_x,axis=-1)
         self.predict = self.model.predict_on_batch(self.batch_x)
         #self.pred_cat = ((tf.squeeze(tf.round(self.predict))).numpy()).astype(int).tolist()
-        self.pred_cat = tf.argmax(self.predict, axis=1).numpy().astype(int).tolist()
+        self.pred_cat = [1 if output[1] >= 0.5 else 0 for output in self.predict]
+        
         
         for idx, segment in enumerate(self.results):
             self.results[idx] += [self.true[idx], self.pred_cat[idx]]
@@ -218,7 +220,7 @@ class ValidatonTestData :
 
 #%%
 
-def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size):
+def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size, channel):
     overlap_sliding_size = 1
     normal_sliding_size = 1
     test_batch_size = 10
@@ -230,13 +232,13 @@ def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size):
         # test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
         # edf_file_path = "/host/d/SNU_DATA"
         test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
-        edf_file_path = "/home/SNU_DATA"
+        edf_file_path = "/host/d/SNU_DATA"
     elif data_type == 'chb' or data_type == 'chb_one_ch':
         # test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
         # edf_file_path = "/host/d/CHB"
 
-        test_info_file_path = "/home/CHB/patient_info_chb_test.csv"
-        edf_file_path = "/home/CHB"
+        test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
+        edf_file_path = "/host/d/CHB"
     
 
 
@@ -244,20 +246,21 @@ def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size):
     checkpoint_dir = os.path.dirname(checkpoint_path)
     fullmodel = tf.keras.models.load_model(checkpoint_path)
 
-    val_object = ValidatonTestData(test_interval_set, window_size, fullmodel, test_batch_size, test_info_file_path, edf_file_path, data_type)
+    val_object = ValidatonTestData(test_interval_set, window_size, fullmodel, test_batch_size, test_info_file_path, edf_file_path, data_type, channel)
     # %%
     val_object.start(k,n)
     sens,fpr = val_object.Calc()
     del fullmodel
     return val_object.matrix, val_object.tf_matrix, sens, fpr, val_object.seg_res
-# lstm_model_name = "one_ch_dilation_lstm"
-# window_size = 120
-# patient_name = "CHB001"
+
+# lstm_model_name = "one_ch_dilation_lstm_180sec"
+# window_size = 180
+# patient_name = "CHB015"
 # idx = 0
 # checkpoint_path = f"./Dilation/{lstm_model_name}/{patient_name}/set{idx+1}/cp.ckpt"
-# interval_sets = [['CHB001_07', 1473, 3273, 'interictal'], ['CHB001_02', 3003, 3600, 'preictal_early'], ['CHB001_03', 0, 1076, 'preictal_early'], ['CHB001_03', 1076, 2876, 'preictal_ontime'], ['CHB001_03', 2876, 2996, 'preictal_late'], ['CHB001_03', 2996, 3036, 'ictal']]
+# interval_sets = [['CHB015_02', 2092, 3600, 'interictal'], ['CHB015_03', 0, 292, 'interictal'], ['CHB015_16', 1932, 3600, 'preictal_early'], ['CHB015_17', 0, 5, 'preictal_early'], ['CHB015_17', 5, 1805, 'preictal_ontime'], ['CHB015_17', 1805, 1925, 'preictal_late'], ['CHB015_17', 1925, 1960, 'ictal']]
 # interval_sets = IntervalList2Dict(interval_sets)
-
+# validation(checkpoint_path, interval_sets, 'chb_one_ch', 1,1, window_size=window_size)
 
 def SaveAsHeatmap(matrix, path):
     sns.heatmap(matrix,annot=True, cmap='Blues')

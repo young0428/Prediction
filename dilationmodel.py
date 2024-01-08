@@ -95,11 +95,13 @@ def td_net(inputs,splited_window_size = 2, sampling_rate= 200):
     dilation_layer = dilationnet(dilation_net_input)
     dilation_model = Model(inputs = dilation_net_input, outputs = dilation_layer)
 
-    splited_input = layers.Reshape((int(inputs.shape[2]/(splited_window_size*sampling_rate)), 1, splited_window_size*sampling_rate))(inputs)
+    x = layers.Reshape((int(inputs.shape[2]/(splited_window_size*sampling_rate)), 1, splited_window_size*sampling_rate))(inputs)
 
-    x = layers.TimeDistributed(dilation_model)(splited_input)
-    x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(20))(x)
-    x = layers.Dropout(0.2)(x)
+
+    x = layers.TimeDistributed(dilation_model)(x)
+    x = layers.Dropout(0.1)(x)
+    x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(30))(x)
+    x = layers.Dropout(0.1)(x)
     x = layers.Dense(2, activation='softmax')(x)
 
     return x

@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import pywt
+import ssqueezepy as ssq
 import scipy
 def GetBatchIndexes(data_len, batch_num, mult=20):
     batch_size = data_len / batch_num
@@ -47,10 +48,11 @@ def SegmentsCWT(segments, sampling_rate, scale_resolution = 128):
         freqs = np.logspace(np.log10(100),np.log10(0.1),scale_resolution) / sampling_rate
         #freqs = np.linspace(100,0.1,scale_resolution) / sampling_rate
         scale = pywt.frequency2scale('cgau8',freqs) 
-        cwtmatr, _= pywt.cwt(eeg_data, wavelet='cgau8', scales = scale)
+        cwtmatr, *_= ssq.cwt(eeg_data, wavelet='cgau8', scales = scale)
         # normalize
-        cwtmatr /= np.abs(cwtmatr).max()
         cwt_image = np.abs(cwtmatr)
+        cwt_image /= np.abs(cwt_image).max()
+        
 
         cwt_result.append(cwt_image)
 

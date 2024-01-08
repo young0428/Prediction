@@ -2,7 +2,6 @@ from tensorflow.keras.layers import Input, Dense, Conv1D, Conv2D, Dropout, ZeroP
 from tensorflow.keras.layers import AveragePooling1D, Flatten, Conv1DTranspose, Conv2DTranspose, Reshape, Concatenate, AveragePooling2D, MaxPooling2D
 from tensorflow.keras.models import Model
 import tensorflow as tf
-import tensorflow_probability as tfp
 import numpy as np
 from tensorflow.keras import Sequential
 

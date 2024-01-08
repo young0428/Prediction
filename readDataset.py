@@ -88,7 +88,7 @@ def FilteringByChannel(intervals, edf_path, type):
                     'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8',
                     'P8-O2', 'FZ-CZ', 'CZ-PZ']
     channels_snu_one = ['Fp1-AVG']
-    channels_chb_one = ['FP1-F7']
+    channels_chb_one = ['F8-T8']
 
     if type == 'snu':
         channels = channels_snu
@@ -111,7 +111,7 @@ def FilteringByChannel(intervals, edf_path, type):
 
     return copied_intervals
 
-def MakeValidationIntervalSet(patient_specific_intervals):
+def MakeValidationIntervalSet(patient_specific_intervals, least_preictal = 300, least_interictal=1800):
     true_state = ['preictal_ontime', 'preictal_late', 'preictal_early', 'ictal']
     false_state =['interictal']
     start_idx = -1
@@ -119,16 +119,20 @@ def MakeValidationIntervalSet(patient_specific_intervals):
     start_time = -1
     end_time = -1
     train_val_set = []
-    t3_period = 3600
-
+    t3_period = least_interictal
+    preictal_period = 0
+    least_preictal_period = least_preictal
+    least_interictal_period = least_interictal
+    set_cnt = 0
     for idx, interval in enumerate(patient_specific_intervals):
         if interval[3] in true_state:
             if start_idx  ==  -1:
                 start_idx = idx
+
             if (start_idx != -1) and (interval[3] == 'ictal'):
                 if idx+1 < len(patient_specific_intervals):
                     if patient_specific_intervals[idx+1][3] == 'ictal' : continue
-                
+                set_cnt += 1
                 end_idx = idx
                 val_idx_list = []
                 state2find = 'interictal'
@@ -193,18 +197,50 @@ def MakeValidationIntervalSet(patient_specific_intervals):
                         remain_period -= interictal_period
 
                         continue
+                
+                start_idx = -1
+                
 
                 intervals_copied = np.array(intervals_copied)
                 train_mask = np.ones(len(intervals_copied), dtype=bool)
                 train_mask[val_idx_list] = False
                 train_val_dict['train'] = intervals_copied[train_mask].tolist()
 
+                inter_sum = 0
+                preictal_sum = 0
+                for interval in train_val_dict['train']:
+                    if interval[3] == 'interictal':
+                        inter_sum += (int(interval[2])-int(interval[1]))
+                        continue
+                    if interval[3] == 'preictal_ontime':
+                        preictal_sum += (int(interval[2])-int(interval[1]))
+                        continue
+
+                if inter_sum < least_interictal_period or preictal_sum < least_preictal_period:
+                    print(f"train set {set_cnt+1} has not enough period")
+                    continue
+
                 val_mask = np.zeros(len(intervals_copied), dtype=bool)
                 val_mask[val_idx_list] = True
                 train_val_dict['val'] += intervals_copied[val_mask].tolist()
                 
+                inter_sum = 0
+                preictal_sum = 0
+                for interval in train_val_dict['val']:
+                    if interval[3] == 'interictal':
+                        inter_sum += (int(interval[2])-int(interval[1]))
+                        continue
+                    if interval[3] == 'preictal_ontime':
+                        preictal_sum += (int(interval[2])-int(interval[1]))
+                        continue
+
+                if inter_sum < least_interictal_period or preictal_sum < least_preictal_period:
+                    print(f"val set {set_cnt+1} has not enough period")
+                    continue
+
+
                 train_val_set.append(train_val_dict)
-                start_idx = -1
+                
 
     return train_val_set
 
@@ -266,67 +302,58 @@ def Segments2Data(segments, type='snu', manual_channels=None):
     f = None
     cnt = 0
     for idx, segment in enumerate(segments):
-        if not name == segment[0]:
-            name = segment[0]
-            if not f == None:
-                f.close()
-            f = pyedflib.EdfReader(segment[0])
+        with pyedflib.EdfReader(segment[0]) as f:
             skip_start = False   # 연속된 시간이면 한번에 읽기 위해 파일 읽는 시작 시간은 그대로 두고 끝 시간만 갱신함
 
-        freq = f.getSampleFrequencies()
-        labels = f.getSignalLabels()
-        
-        if not all([channel in labels for channel in channels]):
+            freq = f.getSampleFrequencies()
+            labels = f.getSignalLabels()
             
-            f.close()
-            continue
-
-        if not skip_start:
-            interval_sets = [] # 연속된 구간이면 한번에 읽고 구간 정해진거에 따라 나누기 위해 구간 저장
-            read_start = float(segment[1])
-            read_end = 0
-        # 최근 세그먼트의 start+window_size 값보다 read_end 값이 작으면 (읽는 끝값) read_end 값 갱신
-        
-        read_end = float(segment[1]) + float(segment[2])
-        interval_sets.append([float(segment[1])-read_start, float(segment[1])+float(segment[2])-read_start ])
-
-        if not idx+1 >= len(segments) :
-            # 파일이름이 같고, 다음 세그먼트의 시작시간이 더 크면서 현재 세그먼트의 시작시간 + window_size가 다음 세그먼트의 시작이랑 이어질 때
-            if (name == segments[idx+1][0]) and (float(segment[1]) <= float(segments[idx+1][1])) and (float(segment[1]) + float(segment[2]) >= float(segments[idx+1][1])) :
-                skip_start = True
-                continue
-        skip_start = False
-
-        chn_num = len(channels)
-
-        # UpSampling rate
-        target_sampling_rate = 200
-
-        seg = []
-        for i in range(len(interval_sets)):
-            seg.append([])
-
-        
-        for channel in channels:
-            ch_idx = labels.index(channel)
-            signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*float(segment[2])))
-            #128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
-            if not freq[ch_idx] == target_sampling_rate:
-                signal = resample(signal, int(float(segment[2]) * target_sampling_rate ))
+            if not all([channel in labels for channel in channels]):
                 
+                f.close()
+                continue
+
+            if not skip_start:
+                interval_sets = [] # 연속된 구간이면 한번에 읽고 구간 정해진거에 따라 나누기 위해 구간 저장
+                read_start = float(segment[1])
+                read_end = 0
+            # 최근 세그먼트의 start+window_size 값보다 read_end 값이 작으면 (읽는 끝값) read_end 값 갱신
             
-            # for j in range(len(interval_sets)):
-            #     seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
-            for j in range(len(interval_sets)):
-                seg[j].append( list(signal) )
-    
-        for s in seg:    
-            signal_for_all_segments.append(s)
+            read_end = float(segment[1]) + float(segment[2])
+            interval_sets.append([float(segment[1])-read_start, float(segment[1])+float(segment[2])-read_start ])
 
         
-        skip_start = False
-    
-    del f
+            skip_start = False
+
+            chn_num = len(channels)
+
+            # UpSampling rate
+            target_sampling_rate = 200
+
+            seg = []
+            for i in range(len(interval_sets)):
+                seg.append([])
+
+            
+            for channel in channels:
+                ch_idx = labels.index(channel)
+                signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*float(segment[2])))
+                #128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
+                if not freq[ch_idx] == target_sampling_rate:
+                    signal = resample(signal, int(float(segment[2]) * target_sampling_rate ))
+                    
+                
+                # for j in range(len(interval_sets)):
+                #     seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
+                for j in range(len(interval_sets)):
+                    seg[j].append( list(signal) )
+            f.close()
+        
+            for s in seg:    
+                signal_for_all_segments.append(s)
+
+            
+            skip_start = False
 
     return np.array(signal_for_all_segments)
 

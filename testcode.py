@@ -1,10 +1,9 @@
 #%%
 from readDataset import *
-from ModelGenerator import FullModel_generator
 import os
 import pickle
 
-model_name = "one_ch_chb_dilation_model"
+model_name = "one_ch_dilation_lstm_180sec"
 
 train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
 test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
@@ -43,13 +42,12 @@ for patient_idx, patient_name in enumerate(filtered_interval_dict.keys()) :
     patient_sens_sum = 0
     patient_fpr_sum = 0
     set_num = 0
-    
     for idx, set in enumerate(train_val_sets):
 
         checkpoint_path = f"./Dilation/{model_name}/{patient_name}/set{idx+1}/cp.ckpt"
         checkpoint_dir = os.path.dirname(checkpoint_path)
 
-        if not os.path.exists(checkpoint_dir):
+        if not os.path.exists(f'{checkpoint_dir}/ValResults'):
             print(idx, "pass")
             continue
         with open(f'{checkpoint_dir}/training_done','r') as f:
@@ -77,15 +75,19 @@ for patient_idx, patient_name in enumerate(filtered_interval_dict.keys()) :
         patient_avg_acc = patient_acc_sum / set_num
         patient_avg_sens = patient_sens_sum / set_num
         patient_avg_fpr = patient_fpr_sum / set_num
+
+        total_acc_sum += patient_avg_acc
+        total_sens_sum += patient_avg_sens
+        total_fpr_sum += patient_avg_fpr
+        patient_num += 1
+        
         patient_info_list.append((patient_name, patient_avg_acc*100, patient_avg_sens*100, patient_avg_fpr))
         print('-------------------------------')
         print('Patient %s Avg   Acc : %.2f%%, Sens : %.2f%%, FPR : %.3f'%(patient_name, patient_avg_acc*100, patient_avg_sens*100, patient_avg_fpr))
         print('-------------------------------')
 
-    total_acc_sum += patient_avg_acc
-    total_sens_sum += patient_avg_sens
-    total_fpr_sum += patient_avg_fpr
-    patient_num += 1
+    
+    
 
 total_acc = total_acc_sum / patient_num
 total_sens = total_sens_sum / patient_num
