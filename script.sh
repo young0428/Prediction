@@ -20,9 +20,10 @@ while true; do
     # fi
     
     # 1분 휴식
-    pkill -f Training_specific.py
-    echo "1분 휴식..."
-    sleep 1m
+    #pkill -f python3.11
+    #pkill -f /bin/python3.11
+    echo "60초 휴식..."
+    sleep 60s
     
     
     # 루프 횟수 증가

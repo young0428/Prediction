@@ -217,7 +217,7 @@ def MakeValidationIntervalSet(patient_specific_intervals, least_preictal = 300, 
                         continue
 
                 if inter_sum < least_interictal_period or preictal_sum < least_preictal_period:
-                    print(f"train set {set_cnt+1} has not enough period")
+                    #print(f"train set {set_cnt+1} has not enough period")
                     continue
 
                 val_mask = np.zeros(len(intervals_copied), dtype=bool)
@@ -235,7 +235,7 @@ def MakeValidationIntervalSet(patient_specific_intervals, least_preictal = 300, 
                         continue
 
                 if inter_sum < least_interictal_period or preictal_sum < least_preictal_period:
-                    print(f"val set {set_cnt+1} has not enough period")
+                    #print(f"val set {set_cnt+1} has not enough period")
                     continue
 
 
@@ -296,6 +296,7 @@ def Segments2Data(segments, type='snu', manual_channels=None):
     if manual_channels != None:
         channels = manual_channels
 
+
     signal_for_all_segments = []
     name = None
     read_end = 0
@@ -307,12 +308,10 @@ def Segments2Data(segments, type='snu', manual_channels=None):
 
             freq = f.getSampleFrequencies()
             labels = f.getSignalLabels()
-            
             if not all([channel in labels for channel in channels]):
-                
                 f.close()
                 continue
-
+            
             if not skip_start:
                 interval_sets = [] # 연속된 구간이면 한번에 읽고 구간 정해진거에 따라 나누기 위해 구간 저장
                 read_start = float(segment[1])

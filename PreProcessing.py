@@ -3,6 +3,9 @@ import random
 import pywt
 import ssqueezepy as ssq
 import scipy
+import os
+
+
 def GetBatchIndexes(data_len, batch_num, mult=20):
     batch_size = data_len / batch_num
     idx_list = list(range(data_len))
@@ -29,7 +32,7 @@ def FilteringSegments(segments):
     for batch in segments:
         fft_seg = []
         for one_ch_signal in batch:
-            fft_seg.append(BandPassfiltering(signal=one_ch_signal, bandwidth=[0.1, 30], sr=200))
+            fft_seg.append(BandPassfiltering(signal=one_ch_signal, bandwidth=[0.1, 50], sr=200))
         y_batch.append(fft_seg)
     y_batch = np.array(y_batch)
     return y_batch
@@ -48,7 +51,28 @@ def SegmentsCWT(segments, sampling_rate, scale_resolution = 128):
         freqs = np.logspace(np.log10(100),np.log10(0.1),scale_resolution) / sampling_rate
         #freqs = np.linspace(100,0.1,scale_resolution) / sampling_rate
         scale = pywt.frequency2scale('cgau8',freqs) 
-        cwtmatr, *_= ssq.cwt(eeg_data, wavelet='cgau8', scales = scale)
+        cwtmatr, *_= pywt.cwt(eeg_data, scales = scale, wavelet='cgau8')
+        #cwtmatr, *_= ssq.cwt(eeg_data, scales = scale, wavelet='gmw')
+        #cwtmatr = cwtmatr.cpu()
+        # normalize
+        cwt_image = np.abs(cwtmatr)
+        cwt_image /= np.abs(cwt_image).max()
+        
+
+        cwt_result.append(cwt_image)
+
+    return cwt_result
+
+
+def SegmentsSSQCWT(segments, sampling_rate, scale_resolution = 128):
+    cwt_result = []
+    for segment in segments:
+        eeg_data = np.squeeze(segment)
+        freqs = np.logspace(np.log10(100),np.log10(0.1),scale_resolution) / sampling_rate
+        #freqs = np.linspace(100,0.1,scale_resolution) / sampling_rate
+        scale = pywt.frequency2scale('morl',freqs) 
+        cwtmatr, *_= ssq.ssq_cwt(eeg_data, fs = sampling_rate, wavelet='morlet', scales = scale)
+        cwtmatr = cwtmatr.cpu()
         # normalize
         cwt_image = np.abs(cwtmatr)
         cwt_image /= np.abs(cwt_image).max()

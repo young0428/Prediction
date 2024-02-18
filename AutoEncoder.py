@@ -156,51 +156,49 @@ def FullChannelDecoder_for_CHB(inputs):
 
 def OneChannelEncoder(inputs):
 	
-	#x = tf.keras.layers.Rescaling(scale=1./127.5, offset=-1)(inputs)											# output shape = (None, 1, 1000, 1)
+	#x = tf.keras.layers.Rescaling(scale=1./127.5, offset=-1)(inputs)											
 	
 	x = inputs
-	x = Conv2D(filters=32, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 1000, 32)
-	x = BatchNormalization()(x)																# output shape = (None, 1, 1000, 32)
-	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 500, 32)
+	x = Conv2D(filters=32, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	
+	x = BatchNormalization()(x)																
+	x = MaxPooling2D((1,2))(x)																
 
-	x = Conv2D(filters=64, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 500, 64)
-	x = BatchNormalization()(x)																# output shape = (None, 1, 500, 64)
-	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 250, 64)
+	x = Conv2D(filters=64, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	
+	x = BatchNormalization()(x)																
+	x = MaxPooling2D((1,2))(x)																
 
-	x = Conv2D(filters=64, kernel_size=(1, 3), padding='valid', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 248, 16)
-	x = BatchNormalization()(x)																# output shape = (None, 1, 248, 16)
-	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 124, 16)
+	x = Conv2D(filters=64, kernel_size=(1, 3), padding='valid', activation=tf.nn.gelu)(x)	
+	x = BatchNormalization()(x)																
+	x = MaxPooling2D((1,2))(x)																
 
-	x = Conv2D(filters=64, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 124, 64)
-	x = BatchNormalization()(x)																# output shape = (None, 1, 124, 64)
-	x = MaxPooling2D((1,2))(x)																# output shape = (None, 1, 62, 64)
-
-	x = Conv2D(filters=32, kernel_size=(1, 3), padding='same')(x)		# output shape = (None, 1, 62, 8)
+	x = Conv2D(filters=64, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	
+	x = BatchNormalization()(x)																
+	x = MaxPooling2D((1,2))(x)												
+	x = Conv2D(filters=32, kernel_size=(1, 3), padding='same')(x)		
 	
-	outputs = tf.squeeze(x, axis=-3, name="encoder_last")											# output shape = (None, 62, 8)
+	outputs = tf.squeeze(x, axis=-3, name="encoder_last")											
 	
 
 	return outputs
 
 def OneChannelDecoder(inputs):
 
-	x = tf.expand_dims(inputs, axis = -3)														# output shape = (None, 1, 62, 8)
+	x = tf.expand_dims(inputs, axis = -3)														
 	
-	x = UpSampling2D((1,2))(x)																		# output shape = (None, 1, 124, 8)
-	x = Conv2DTranspose(filters=64, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 124, 8)
+	x = UpSampling2D((1,2))(x)																		
+	x = Conv2DTranspose(filters=64, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	
 	x = BatchNormalization()(x)
 
-	x = UpSampling2D((1,2))(x)																		# output shape = (None, 1, 248, 8)
-	x = Conv2DTranspose(filters=64, kernel_size=(1, 3), padding='valid', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 250, 64)
+	x = UpSampling2D((1,2))(x)																		
+	x = Conv2DTranspose(filters=64, kernel_size=(1, 3), padding='valid', activation=tf.nn.gelu)(x)	
 	x = BatchNormalization()(x)
 	
-	x = UpSampling2D((1,2))(x)																		# output shape = (None, 1, 500, 64)
-	x = Conv2DTranspose(filters=32, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	# output shape = (None, 1, 500, 32)
+	x = UpSampling2D((1,2))(x)																		
+	x = Conv2DTranspose(filters=32, kernel_size=(1, 3), padding='same', activation=tf.nn.gelu)(x)	
 	x = BatchNormalization()(x)	
 	
-	x = UpSampling2D((1,2))(x)																		# output shape = (None, 1, 1000, 32)
-	x = Conv2DTranspose(filters=1, kernel_size=(1, 3), padding='same')(x)							# output shape = (None, 1, 1000, 1)
-	
+	x = UpSampling2D((1,2))(x)																		
+	x = Conv2DTranspose(filters=1, kernel_size=(1, 3), padding='same')(x)							
 
 
 	return x

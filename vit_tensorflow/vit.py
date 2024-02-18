@@ -103,6 +103,8 @@ class ViT :
         self.num_classes = num_classes
         self.input_shape = image_shape
         self.patch_shape = patch_shape
+        print(image_shape)
+        print(patch_shape)
         self.num_patches = int((image_shape[0] * image_shape[1])  / (patch_shape[0] * patch_shape[1]))
         self.projection_dim = projection_dim
         self.num_heads = num_heads
@@ -121,15 +123,24 @@ class ViT :
         patches = Patches(self.patch_shape)(inputs)
         # Encode patches.
         encoded_patches = PatchEncoder(self.num_patches, self.projection_dim)(patches)
-
+        Q = []
+        K = []
+        V = []
         # Create multiple layers of the Transformer block.
         for _ in range(self.transformer_layers):
             # Layer normalization 1.
             x1 = layers.LayerNormalization(epsilon=1e-6)(encoded_patches)
             # Create a multi-head attention layer.
-            attention_output = layers.MultiHeadAttention(
+            attention_layer = layers.MultiHeadAttention(
                 num_heads=self.num_heads, key_dim=self.projection_dim, dropout=0.1
-            )(x1, x1)
+            )
+            
+            attention_output, query, key, value = attention_layer(x1,x1)
+            
+            Q.append(query)
+            K.append(key)
+            V.append(value)
+            
             # Skip connection 1.
             x2 = layers.Add()([attention_output, encoded_patches])
             # Layer normalization 2.
@@ -150,7 +161,7 @@ class ViT :
         # Create the Keras model.
         #model = keras.Model(inputs=inputs, outputs=features, name=name)
 
-        return features
+        return features, Q, K, V
 
 
 """

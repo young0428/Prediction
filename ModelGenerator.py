@@ -4,15 +4,15 @@ from keras.utils import Sequence
 from readDataset import *
 import PreProcessing
 import random
-
+import multiprocessing as mp
 
 
 class FullModel_generator(Sequence):
     def __init__(self,type_1_data=[], type_2_data=[], type_3_data=[], batch_size=500, data_type = 'snu', target_batch_num = None, gen_type = 'train'):
         
-        self.ratio_type_1 = [5,4,3,2]
+        self.ratio_type_1 = [2,4,3,2]
         self.ratio_type_2 = [0.05,0.05,0.05,0.05]
-        self.ratio_type_3 = [5,6,7,8]
+        self.ratio_type_3 = [8,6,7,8]
         self.batch_size = batch_size
         self.epoch = 0
         self.update_period = 10
@@ -93,7 +93,8 @@ class SplitedLSTM_generator(FullModel_generator):
         super().__init__(type_1_data, type_2_data, type_3_data, batch_size, data_type, target_batch_num, gen_type)
         self.splited_window_size = splited_window_size
         self.channel = channel
-    def __getitem__(self, idx):
+        
+    def GetBatchData(self,idx):
         batch_concat = None
         origin_idx = self.batch_mask[idx]
 
@@ -113,10 +114,13 @@ class SplitedLSTM_generator(FullModel_generator):
         else:
             type_3_seg = self.type_3_data[self.batch_set[4][self.batch_set[5][origin_idx]]]
             batch_concat = np.concatenate((batch_concat, type_3_seg))
+            
+        return batch_concat, type_1_seg, type_2_seg, type_3_seg
+    def __getitem__(self, idx):
 
-     
+        batch_concat, type_1_seg, type_2_seg, type_3_seg = self.GetBatchData(idx)
         x_batch = Segments2Data(batch_concat, self.data_type, manual_channels=self.channel)
-        
+        x_batch = PreProcessing.FilteringSegments(x_batch)
         sr = 200
         # (batch_size, ch, window_size * sr)
         x_shape = x_batch.shape
@@ -124,7 +128,6 @@ class SplitedLSTM_generator(FullModel_generator):
         x_batch.shape = (x_shape[0], x_shape[1], window_num, sr*self.splited_window_size)
         #(batch, ch, window_num, window_size * sr)
         if self.gen_type == 'train' and self.epoch <= 20:
-            
             for i in range(x_shape[0]):
                 one_data = x_batch[i]
                 #(ch, window_num, window_size * sr)
@@ -136,8 +139,6 @@ class SplitedLSTM_generator(FullModel_generator):
         
         x_batch.shape = (x_shape[0], x_shape[1], window_num*sr*self.splited_window_size)
             
-        
-
 
         type_1_len = len(type_1_seg)
         type_2_len = len(type_2_seg)
@@ -154,11 +155,39 @@ class SplitedLSTM_generator(FullModel_generator):
 
         return x_batch, y_batch
     
+class CWT_generator(SplitedLSTM_generator):
+    def __init__(self,type_1_data=[], type_2_data=[], type_3_data=[], batch_size=500, data_type = 'snu', target_batch_num = None, gen_type = 'train', splited_window_size=2, channel=None):
+        super().__init__(type_1_data, type_2_data, type_3_data, batch_size, data_type,  target_batch_num , gen_type,  splited_window_size, channel)
+        
+    
+    def __getitem__(self,idx):
+        batch_concat, type_1_seg, type_2_seg, type_3_seg = self.GetBatchData(idx)
+        rawEEG_batch = Segments2Data(batch_concat, self.data_type, manual_channels=self.channel)
+        sr = 200
+        scale_resolution = 128
+        x_shape = rawEEG_batch.shape
+        window_num = int(x_shape[2]/(sr*self.splited_window_size))
+        
+        cwt_batch = np.array(PreProcessing.SegmentsSSQCWT(rawEEG_batch, sr, scale_resolution))
+        
+        type_1_len = len(type_1_seg)
+        type_2_len = len(type_2_seg)
+        type_3_len = len(type_3_seg)
 
+        y_batch = np.concatenate((  np.ones(type_1_len), 
+                                    np.zeros(type_2_len), 
+                                    np.zeros(type_3_len)))
 
-
+        y_batch = np.asarray(y_batch, dtype=np.int32)
+        y_batch = self.iden_mat[y_batch]
+        
+        
+        
+        
+        return cwt_batch, y_batch
+        
 class ViTGenerator_one_channel(Sequence):
-    def __init__(self,type_1_data=[], type_2_data=[], type_3_data=[], batch_size=500, data_type = 'snu', ds_factor = 1, scale_resolution = 128, sampling_rate = 200):
+    def __init__(self,type_1_data=[], type_2_data=[], type_3_data=[], batch_size=500, data_type = 'snu', ds_factor = 1, scale_resolution = 128, sampling_rate = 200, channel=None):
         self.ratio_type_1 = [5,4,3,2]
         self.ratio_type_2 = [0.05,0.05,0.05,0.05]
         self.ratio_type_3 = [5,6,7,8]
@@ -174,8 +203,8 @@ class ViTGenerator_one_channel(Sequence):
         self.data_type = data_type
         self.scale_resolution = scale_resolution
         self.sampling_rate = sampling_rate
-        self.manual_channels = ['FP1-F7']
-        #self.manual_channels = ['FP1-F7']
+        
+        self.manual_channels = channel
         self.ds_factor = ds_factor
 
         self.iden_mat = np.eye(2)
@@ -188,6 +217,7 @@ class ViTGenerator_one_channel(Sequence):
     def on_epoch_end(self):
         self.epoch += 1
         self.ratio_idx = 0
+        self.batch_set, self.batch_num = updateDataSet(self.type_1_len, self.type_2_len, self.type_3_len, [self.ratio_type_1[self.ratio_idx], self.ratio_type_2[self.ratio_idx], self.ratio_type_3[self.ratio_idx]], self.batch_size)
     def __len__(self):
         return self.batch_num
     
@@ -215,7 +245,7 @@ class ViTGenerator_one_channel(Sequence):
     def __getitem__(self, idx):
         
         batch_concat, type_1_seg, type_2_seg, type_3_seg = self.NotNoneBatch(idx)
-        raw_batch = Segments2Data(batch_concat, manual_channels=self.manual_channels)
+        raw_batch = Segments2Data(batch_concat, self.data_type, manual_channels=self.manual_channels)
         raw_batch.shape = (raw_batch.shape[0]*raw_batch.shape[1],raw_batch.shape[2])
         x_batch = np.array(PreProcessing.SegmentsCWT(raw_batch, sampling_rate = self.sampling_rate, scale_resolution = self.scale_resolution))
         x_batch = x_batch[:,:,::self.ds_factor]

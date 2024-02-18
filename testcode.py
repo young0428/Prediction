@@ -4,12 +4,13 @@ import os
 import pickle
 
 model_name = "one_ch_dilation_lstm_180sec"
+channels = ['FP1-F7','T7-P7','FP2-F4','T8-P8','P7-O1','P8-O2']
 
 train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
 test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
 edf_file_path = "/host/d/CHB"
 
-data_type = 'chb_one_ch'
+data_type = 'one_ch_dilation_lstm_300sec_random'
 
 
 #%%
@@ -37,7 +38,8 @@ patient_info_list = []
 for patient_idx, patient_name in enumerate(filtered_interval_dict.keys()) :
         
     train_val_sets = MakeValidationIntervalSet(filtered_interval_dict[patient_name])
-
+    if patient_name == 'CHB003':
+        print(train_val_sets['val'])
     patient_acc_sum = 0
     patient_sens_sum = 0
     patient_fpr_sum = 0
@@ -101,3 +103,5 @@ print('ToTal       Acc : %.2f%%, Sens : %.2f%%, FPR : %.3f'%(total_acc*100, tota
 
 print(patient_num)
         
+
+# %%

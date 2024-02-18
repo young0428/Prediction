@@ -106,3 +106,4 @@ def td_net(inputs,splited_window_size = 2, sampling_rate= 200):
 
     return x
 
+

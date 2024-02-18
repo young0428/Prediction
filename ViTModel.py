@@ -2,34 +2,52 @@
 import keras
 from vit_tensorflow.vit import ViT
 import tensorflow as tf
+import tensorflow_addons as tfa
 import numpy as np
 
-def BuildMViTModel(full_ch_inputs):
-    vit_model_outputs = []
-    
-    channel_num = full_ch_inputs.shape[1]
-    
-    for i in range(channel_num):
-        one_channel_input = full_ch_inputs[:,i]
-        
-        v = ViT(
-            image_shape = (full_ch_inputs.shape[-3], full_ch_inputs.shape[-2], full_ch_inputs.shape[-1]),
-            patch_shape = (50, 50),
-            projection_dim = 64,
-            num_heads = 4,
-            transformer_units = [64],
-            mlp_head_units = [32],
-            num_layers = 4,
-        )
-        
-        single_vit_output = v.create_vit_layer(inputs = one_channel_input, name = f'vit{i+1}')
-        vit_model_outputs.append(single_vit_output)
 
-    features_concated = tf.keras.layers.concatenate(vit_model_outputs)
-    x = tf.keras.layers.Dense(256, activation=keras.activations.gelu)(features_concated)
-    outputs = tf.keras.layers.Dense(2,activation=keras.activations.softmax)(x)
+def BoradAttentionViT(one_ch_inputs):
+    head_unit_num = 128
+    v = ViT(
+        image_shape = (one_ch_inputs.shape[-3], one_ch_inputs.shape[-2], one_ch_inputs.shape[-1]),
+        patch_shape = (32, 200),
+        projection_dim = 64,
+        num_heads = 8,
+        transformer_units = [64],
+        mlp_head_units = [head_unit_num],
+        num_layers = 8,
+    )
+
+    vit_outputs, Q, K, V = v.create_vit_layer(inputs = one_ch_inputs)
     
-    return keras.models.Model(inputs = full_ch_inputs, outputs = outputs, name = 'mvit')
+    Q = tf.concat(Q, axis=-1)
+    K = tf.concat(K, axis=-1)
+    V = tf.concat(V, axis=-1)
+    #%%
+    dims = Q.shape[-1]
+    scale = dims ** -0.5
+    attn = (Q @ tf.transpose(K,perm=[0,1,3,2])) * scale
+    attn = tf.nn.softmax(attn,axis=-1)
+    x = attn @ V
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dense(head_unit_num)(x)
+    x = tf.keras.layers.Dropout(0.2)(x)
+    x = vit_outputs + x
+    
+    return x
+    
+if __name__ == '__main__':
+    one_ch_inputs = tf.keras.layers.Input(shape=(128, 6000,1))
+    output = BoradAttentionViT(one_ch_inputs)
+    model = tf.keras.Model(one_ch_inputs, output)
+    model.summary()
+
+
+        
+
+
+
+    
 
 
 # %%

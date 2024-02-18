@@ -28,7 +28,7 @@ import pyedflib
 
 
 class ValidatonTestData :
-    def __init__(self, interval_sets, window_size, model, batch_size, info_file_path, edf_file_path, which_data, channel):
+    def __init__(self, interval_sets, window_size, model, batch_size, info_file_path, edf_file_path, which_data, channel, preprocessing):
         self.window_size = window_size
         self.model = model
         self.info_file_path = info_file_path
@@ -46,6 +46,7 @@ class ValidatonTestData :
         self.patient_dict = {}
         self.seg_res = []
         self.channel = channel
+        self.preprocessing = preprocessing
 
     def start(self,k,n):
         sorted_intervals = self.IntervalSorting(self.interval_sets) # [환자명, start, end, state_label]
@@ -77,6 +78,7 @@ class ValidatonTestData :
         self.state_dict = {'preictal_ontime':1, 'interictal':0}
         temp = []
         self.intervals_state = []
+        
         for state in state_list:
             if state in interval_sets.keys():
                 for interval in interval_sets[state]:
@@ -113,7 +115,7 @@ class ValidatonTestData :
             self.full_signal = np.array(self.full_signal)
     def MakeSegments(self, sorted_interval):
         # segment = [start, duration]
-        self.sliding_size = self.alarm_interval
+        self.sliding_size = 2
         start_gap = max(0, self.window_size - self.sliding_size)
         time_for_k_of_n = self.sliding_size * self.k + start_gap
         # inverval = [환자명, start, end, state_label]
@@ -121,8 +123,9 @@ class ValidatonTestData :
         self.labels = []
         self.segments_state = []
         for interval in sorted_interval :
-            time = interval[1] # start
-            while not (time + time_for_k_of_n > interval[2]) : # end
+            time = float(interval[1]) # start
+
+            while not (time + time_for_k_of_n > float(interval[2])) : # end
                 self.segments.append([ MakePath(interval[0],self.edf_file_path) ,time, time_for_k_of_n, interval[4]])  # segment = [start, duration]
                 self.labels.append(interval[3])
                 self.segments_state.append(interval[4])
@@ -145,6 +148,7 @@ class ValidatonTestData :
         
         # segment = [filepath, start, duration]
         for seg_idx, segment in enumerate(segments):
+            
             signal = Segments2Data([segment],self.which_data, self.channel)
             signal = signal[0]
             #signal /= 50
@@ -153,7 +157,15 @@ class ValidatonTestData :
             sliding_num = int(self.target_sr * self.sliding_size)
             for j in range(self.k):
                 s = start_idx + j * sliding_num
-                self.batch_x.append(signal[:,s:s+sample_num])
+                if self.preprocessing == None:
+                    x = signal[:,s:s+sample_num]
+                else:
+                    
+                    x = self.preprocessing(signal[:,s:s+sample_num],200,64)
+                    x = np.squeeze(x)
+                    
+                    
+                self.batch_x.append(x)
                 self.true.append(labels[seg_idx])
                 self.results.append([segment[0], float(segment[1]) + j*self.sliding_size,self.window_size, segment[3]])
                 
@@ -164,11 +176,10 @@ class ValidatonTestData :
         self.predict = self.model.predict_on_batch(self.batch_x)
         #self.pred_cat = ((tf.squeeze(tf.round(self.predict))).numpy()).astype(int).tolist()
         self.pred_cat = [1 if output[1] >= 0.5 else 0 for output in self.predict]
-        
-        
+
         for idx, segment in enumerate(self.results):
-            self.results[idx] += [self.true[idx], self.pred_cat[idx]]
-            
+            self.results[idx] += [self.true[idx], self.predict[idx][1]]
+
             self.seg_res.append(self.results[idx])
 
     # K of N을 적용해서 alarm 울림 (1), alarm 안울림 (0) 결정
@@ -220,7 +231,7 @@ class ValidatonTestData :
 
 #%%
 
-def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size, channel):
+def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size, channel, preprocessing = None):
     overlap_sliding_size = 1
     normal_sliding_size = 1
     test_batch_size = 10
@@ -246,21 +257,22 @@ def validation(checkpoint_path,test_interval_set, data_type,k,n, window_size, ch
     checkpoint_dir = os.path.dirname(checkpoint_path)
     fullmodel = tf.keras.models.load_model(checkpoint_path)
 
-    val_object = ValidatonTestData(test_interval_set, window_size, fullmodel, test_batch_size, test_info_file_path, edf_file_path, data_type, channel)
+    val_object = ValidatonTestData(test_interval_set, window_size, fullmodel, test_batch_size, test_info_file_path, edf_file_path, data_type, channel, preprocessing)
     # %%
     val_object.start(k,n)
     sens,fpr = val_object.Calc()
     del fullmodel
     return val_object.matrix, val_object.tf_matrix, sens, fpr, val_object.seg_res
 
-# lstm_model_name = "one_ch_dilation_lstm_180sec"
-# window_size = 180
-# patient_name = "CHB015"
-# idx = 0
+# lstm_model_name = "one_ch_dilation_lstm_300sec_random_FP1-F7"
+# window_size = 300
+# patient_name = "CHB014"
+# idx = 1
 # checkpoint_path = f"./Dilation/{lstm_model_name}/{patient_name}/set{idx+1}/cp.ckpt"
-# interval_sets = [['CHB015_02', 2092, 3600, 'interictal'], ['CHB015_03', 0, 292, 'interictal'], ['CHB015_16', 1932, 3600, 'preictal_early'], ['CHB015_17', 0, 5, 'preictal_early'], ['CHB015_17', 5, 1805, 'preictal_ontime'], ['CHB015_17', 1805, 1925, 'preictal_late'], ['CHB015_17', 1925, 1960, 'ictal']]
+# interval_sets = [['CHB014_22', 0, 399, 'interictal'], ['CHB014_03', '2000', '3059', 'preictal_early'], ['CHB014_03', '3059', '3600', 'preictal_ontime'], ['CHB014_04', '0', '1252', 'preictal_ontime'], ['CHB014_04', '1252', '1372', 'preictal_late'], ['CHB014_04', '1372', '1392', 'ictal'], ['CHB014_14', '1858', '3259', 'interictal']]
+
 # interval_sets = IntervalList2Dict(interval_sets)
-# validation(checkpoint_path, interval_sets, 'chb_one_ch', 1,1, window_size=window_size)
+# validation(checkpoint_path, interval_sets, 'chb_one_ch', 1,1, window_size=window_size, channel=['FP1-F7'])
 
 def SaveAsHeatmap(matrix, path):
     sns.heatmap(matrix,annot=True, cmap='Blues')
