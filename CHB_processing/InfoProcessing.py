@@ -56,17 +56,73 @@ def get_patient_file_list(patient_dir):
 def date2unix(time):
     return (time - datetime.datetime(1970, 1, 1)).total_seconds()
 
-def get_file_start_time(file_path):
+def get_file_start_end_time(file_path):
     with pyedflib.EdfReader(file_path) as f:
         unix_start_time = int(date2unix(f.getStartdatetime()))
-    return unix_start_time
+    with pyedflib.EdfReader(file_path) as f:
+        unix_end_time = int(date2unix(f.getStartdatetime()) + f.getFileDuration())
+    return unix_start_time, unix_end_time
 
 def get_start_end_stamp(file_list):
     start_file = file_list[0]
     end_file = file_list[-1]
-    unix_start_time = get_file_start_time(start_file)
-    with pyedflib.EdfReader(end_file) as f:
-        unix_end_time = date2unix(f.getStartdatetime()) + f.getFileDuration()
+    unix_start_time, _= get_file_start_end_time(start_file)
+    _, unix_end_time = get_file_start_end_time(end_file)
+    
+    
+def find_continuous_ones(lst):
+    continuous_ones = []
+    start = None
+    for i in range(len(lst)):
+        if lst[i] == 1:
+            if start is None:
+                start = i
+        else:
+            if start is not None:
+                end = i - 1
+                continuous_ones.append([start, end])
+                start = None
+
+    # Check if the last interval continues till the end
+    if start is not None:
+        continuous_ones.append([start, len(lst) - 1])
+
+    return continuous_ones
+
+def merge_intervals_with_gap(intervals, gap_sec):
+    merged_intervals = []
+    current_interval = None
+
+    for interval in intervals:
+        if current_interval is None:
+            current_interval = interval[:]
+        else:
+            # Check if the gap between the current interval and the new one is within the specified limit
+            if interval[0] - current_interval[1] <= gap_sec:
+                # Merge the intervals
+                current_interval[1] = interval[1]
+            else:
+                # Gap is exceeded, add the current interval and start a new one
+                merged_intervals.append(current_interval)
+                current_interval = interval[:]
+
+    # Add the last interval
+    if current_interval is not None:
+        merged_intervals.append(current_interval)
+
+    # Format the output with individual intervals before merging
+    final_result = []
+    for merged_interval in merged_intervals:
+        # Extract individual intervals before merging
+        individual_intervals = [interval for interval in intervals if merged_interval[0] <= interval[0] <= merged_interval[1]]
+        final_result.append([merged_interval, individual_intervals])
+
+    return final_result
+        
+        
+        
+    
+            
 
     
     return [int(unix_start_time), int(unix_end_time)]
@@ -78,6 +134,7 @@ if __name__ == '__main__':
     patient_start_end = {}
     total_time_flag = {}
     total_seizure_set = {}
+    enable_period_flag = {}
     patient_seizure_info = {}
     SOP = 30
     SPH = 2
@@ -88,9 +145,11 @@ if __name__ == '__main__':
     num_to_state_dict={0:'postictal', 1:'ictal', 2:'preictal_early', 3:'preictal_ontime', 4:'preictal_late', 5:'interictal'}
 
     for patient_name in patient_list:
+        
         patient_file_list[patient_name] = sorted(get_patient_file_list(f"{chb_dir}/{patient_name}"))
         patient_seizure_info[patient_name] = get_chb_summary_info(f"{chb_dir}/{patient_name}/{patient_name}_summary.txt")  
         patient_start_end[patient_name] = get_start_end_stamp(patient_file_list[patient_name])
+        
         
     for patient_name in patient_list:
         patient_start_time = patient_start_end[patient_name][0]
@@ -98,14 +157,23 @@ if __name__ == '__main__':
         patient_duration = patient_end_time - patient_start_time
         seizure_time_flag = np.array([5]*patient_duration)
         
+        enable_period_flag[patient_name] = np.array([0]*patient_duration)   
+        for file in patient_file_list[patient_name]:
+            file_start, file_end = get_file_start_end_time(file)
+            file_start_pos = file_start - patient_start_time
+            file_end_pos = file_end - patient_start_time
+            enable_period_flag[patient_name][file_start_pos:file_end_pos] = 1
+            
         seizure_time_set = []
+        
+        
         for name_seizure_set in patient_seizure_info[patient_name]:
             file_path = chb_dir + "/" + name_seizure_set['name']
             
             for seizure in name_seizure_set['seizure']:
                 seizure_start_time = seizure[0]
                 seizure_end_time = seizure[1]
-                file_start_time = get_file_start_time(file_path)
+                file_start_time = get_file_start_end_time(file_path)
                 file_start_pos = file_start_time - patient_start_time
                 ictal_start_pos = file_start_pos + seizure_start_time
                 ictal_end_pos = file_start_pos + seizure_end_time
