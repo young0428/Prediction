@@ -26,9 +26,9 @@ import os
 
 #os.environ["KERAS_BACKEND"] = "jax"  # @param ["tensorflow", "jax", "torch"]
 
-import keras
-from keras import layers
 import tensorflow as tf
+import tensorflow.keras.layers as layers
+import time
 
 
 import numpy as np
@@ -38,17 +38,19 @@ class PatchEncoder(layers.Layer):
     def __init__(self, num_patches, projection_dim):
         super().__init__()
         self.num_patches = num_patches
-        self.projection = layers.Dense(units=projection_dim)
+        self.projection = projection_dim
         self.position_embedding = layers.Embedding(
             input_dim=num_patches, output_dim=projection_dim
         )
 
     def call(self, patch):
+        
         positions = tf.keras.backend.expand_dims(
             tf.keras.backend.arange(start=0, stop=self.num_patches, step=1), axis=0
         )
-        projected_patches = self.projection(patch)
+        projected_patches = layers.Dense(self.projection)(patch)
         encoded = projected_patches + self.position_embedding(positions)
+
         return encoded
 
     def get_config(self):
@@ -103,8 +105,6 @@ class ViT :
         self.num_classes = num_classes
         self.input_shape = image_shape
         self.patch_shape = patch_shape
-        print(image_shape)
-        print(patch_shape)
         self.num_patches = int((image_shape[0] * image_shape[1])  / (patch_shape[0] * patch_shape[1]))
         self.projection_dim = projection_dim
         self.num_heads = num_heads
@@ -120,15 +120,19 @@ class ViT :
 
     def create_vit_layer(self, inputs, name = 'ViT'):
         # Create patches.
+        
         patches = Patches(self.patch_shape)(inputs)
+
         # Encode patches.
         encoded_patches = PatchEncoder(self.num_patches, self.projection_dim)(patches)
+        time.sleep(3)
         Q = []
         K = []
         V = []
         # Create multiple layers of the Transformer block.
         for _ in range(self.transformer_layers):
             # Layer normalization 1.
+            
             x1 = layers.LayerNormalization(epsilon=1e-6)(encoded_patches)
             # Create a multi-head attention layer.
             attention_layer = layers.MultiHeadAttention(

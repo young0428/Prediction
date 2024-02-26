@@ -33,52 +33,28 @@ if gpus:
 
 # %%
 def train(model_name, encoder_model_name, channel, data_type = 'snu'):
-    window_size = 300
+    window_size = 30
     overlap_sliding_size = 3
     normal_sliding_size = 10
     target_batch_num = None
     sr = 200
     epochs = 100
-    batch_size = 100
+    batch_size = 200
     state = ['preictal_ontime', 'ictal', 'preictal_late', 'preictal_early', 'postictal','interictal']
 
     # for WSL
-    autoencoder_model_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
-    if data_type=='snu':
+
+    if data_type=='snu' or data_type=='snu_one_ch':
         train_info_file_path = "/host/d/SNU_DATA/patient_info_snu_train.csv"
         test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
         edf_file_path = "/host/d/SNU_DATA"
 
-        checkpoint_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
-        checkpoint_dir = os.path.dirname(checkpoint_path)
-        if not os.path.exists(checkpoint_dir):
-            os.mkdir(checkpoint_dir)
-
-
-    elif data_type == 'chb':
-
+    elif data_type == 'chb' or data_type=='chb_one_ch':
         train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
         test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
         edf_file_path = "/host/d/CHB"
-
-        checkpoint_path = f"AutoEncoder/{encoder_model_name}/cp.ckpt"
-        checkpoint_dir = os.path.dirname(checkpoint_path)
-        if not os.path.exists(checkpoint_dir):
-            os.mkdir(checkpoint_dir)
-
-            
-    
-    elif data_type=='chb_one_ch':
-        train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
-        test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
-        edf_file_path = "/host/d/CHB"
-
-        
-
-    elif data_type=='snu_one_ch':
-        train_info_file_path = "/host/d/SNU_DATA/patient_info_snu_train.csv"
-        test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
-        edf_file_path = "/host/d/SNU_DATA"
+    else:
+        return 
 
 
     train_interval_set, train_interval_overall = LoadDataset(train_info_file_path)
@@ -184,7 +160,7 @@ def train(model_name, encoder_model_name, channel, data_type = 'snu'):
                 full_model = tf.keras.models.load_model(checkpoint_path)
             else:
                 inputs = Input(shape=(1,int(window_size*sr)))
-                dilation_output = td_net(inputs, splited_window_size=2, sampling_rate=sr)
+                dilation_output = td_net(inputs, splited_window_size=5, sampling_rate=sr)
                 full_model = Model(inputs=inputs, outputs=dilation_output)
 
             logs = f"logs/{model_name}/{patient_name}/set{idx+1}"    
@@ -256,7 +232,7 @@ def train(model_name, encoder_model_name, channel, data_type = 'snu'):
 
             del full_model
             #del dilation_output
-            matrix, postprocessed_matrix, sens, fpr, seg_results = TestFullModel_specific.validation(checkpoint_path, val_intervals, data_type, 5,4, window_size=window_size, channel=channel)
+            matrix, postprocessed_matrix, sens, fpr, seg_results = TestFullModel_specific.validation(checkpoint_path, val_intervals, data_type, 1,1, window_size=window_size, channel=channel)
             patient_sens_sum += sens
             patient_fpr_sum += fpr
             result_list = [matrix, postprocessed_matrix, sens, fpr, seg_results]

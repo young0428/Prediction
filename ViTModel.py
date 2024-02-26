@@ -4,6 +4,7 @@ from vit_tensorflow.vit import ViT
 import tensorflow as tf
 import tensorflow_addons as tfa
 import numpy as np
+import time
 
 
 def BoradAttentionViT(one_ch_inputs):
@@ -12,13 +13,14 @@ def BoradAttentionViT(one_ch_inputs):
         image_shape = (one_ch_inputs.shape[-3], one_ch_inputs.shape[-2], one_ch_inputs.shape[-1]),
         patch_shape = (32, 200),
         projection_dim = 64,
-        num_heads = 8,
-        transformer_units = [64],
+        num_heads = 6,
+        transformer_units = [48],
         mlp_head_units = [head_unit_num],
-        num_layers = 8,
+        num_layers = 6,
     )
 
     vit_outputs, Q, K, V = v.create_vit_layer(inputs = one_ch_inputs)
+    
     
     Q = tf.concat(Q, axis=-1)
     K = tf.concat(K, axis=-1)
@@ -37,7 +39,7 @@ def BoradAttentionViT(one_ch_inputs):
     return x
     
 if __name__ == '__main__':
-    one_ch_inputs = tf.keras.layers.Input(shape=(128, 6000,1))
+    one_ch_inputs = tf.keras.layers.Input(shape=(128, 4000,1))
     output = BoradAttentionViT(one_ch_inputs)
     model = tf.keras.Model(one_ch_inputs, output)
     model.summary()

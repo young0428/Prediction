@@ -72,7 +72,7 @@ def SegmentsSSQCWT(segments, sampling_rate, scale_resolution = 128):
         #freqs = np.linspace(100,0.1,scale_resolution) / sampling_rate
         scale = pywt.frequency2scale('morl',freqs) 
         cwtmatr, *_= ssq.ssq_cwt(eeg_data, fs = sampling_rate, wavelet='morlet', scales = scale)
-        cwtmatr = cwtmatr.cpu()
+        #cwtmatr = cwtmatr.cpu()
         # normalize
         cwt_image = np.abs(cwtmatr)
         cwt_image /= np.abs(cwt_image).max()

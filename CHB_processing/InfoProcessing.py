@@ -2,6 +2,8 @@
 import os
 import pyedflib
 import datetime
+import re
+
 import numpy as np
 def get_chb_summary_info(summary_path: str):
     with open(summary_path, 'r') as f:
@@ -53,9 +55,11 @@ def get_patient_file_list(patient_dir):
                 file_list.append(patient_dir+"/"+file)
     return file_list
 #%%
+# date to unix timestamp
 def date2unix(time):
     return (time - datetime.datetime(1970, 1, 1)).total_seconds()
 
+# get start time, end time of a file
 def get_file_start_end_time(file_path):
     with pyedflib.EdfReader(file_path) as f:
         unix_start_time = int(date2unix(f.getStartdatetime()))
@@ -63,31 +67,14 @@ def get_file_start_end_time(file_path):
         unix_end_time = int(date2unix(f.getStartdatetime()) + f.getFileDuration())
     return unix_start_time, unix_end_time
 
+# get start time of first file and end time of last file as timestamp
 def get_start_end_stamp(file_list):
     start_file = file_list[0]
     end_file = file_list[-1]
     unix_start_time, _= get_file_start_end_time(start_file)
     _, unix_end_time = get_file_start_end_time(end_file)
     
-    
-def find_continuous_ones(lst):
-    continuous_ones = []
-    start = None
-    for i in range(len(lst)):
-        if lst[i] == 1:
-            if start is None:
-                start = i
-        else:
-            if start is not None:
-                end = i - 1
-                continuous_ones.append([start, end])
-                start = None
-
-    # Check if the last interval continues till the end
-    if start is not None:
-        continuous_ones.append([start, len(lst) - 1])
-
-    return continuous_ones
+    return [int(unix_start_time), int(unix_end_time)]
 
 def merge_intervals_with_gap(intervals, gap_sec):
     merged_intervals = []
@@ -103,7 +90,7 @@ def merge_intervals_with_gap(intervals, gap_sec):
                 current_interval[1] = interval[1]
             else:
                 # Gap is exceeded, add the current interval and start a new one
-                merged_intervals.append(current_interval)
+                merged_intervals.append(current_interval[0:2])
                 current_interval = interval[:]
 
     # Add the last interval
@@ -118,24 +105,24 @@ def merge_intervals_with_gap(intervals, gap_sec):
         final_result.append([merged_interval, individual_intervals])
 
     return final_result
-        
-        
-        
-    
-            
 
+
+# chb01_01 -> CHB001_01
+def name_formatting(filename):
+    return filename[:3].upper() + filename[3:5].zfill(3) + filename[5:]
     
-    return [int(unix_start_time), int(unix_end_time)]
-#%%
-if __name__ == '__main__':
+def get_chb_interval_info():
     chb_dir = "/host/d/CHB"
     patient_list = [ "CHB%03d"%(i+1) for i in range(24) ]
+    patient_list.remove("CHB017")
     patient_file_list = {}
     patient_start_end = {}
     total_time_flag = {}
-    total_seizure_set = {}
+    patient_total_validation_duration = {}
     enable_period_flag = {}
     patient_seizure_info = {}
+    patient_enable_interval_info = {}
+    interval_info = {}
     SOP = 30
     SPH = 2
     interictal_gap = 10800 # sec
@@ -157,28 +144,40 @@ if __name__ == '__main__':
         patient_duration = patient_end_time - patient_start_time
         seizure_time_flag = np.array([5]*patient_duration)
         
-        enable_period_flag[patient_name] = np.array([0]*patient_duration)   
+        enable_period_flag[patient_name] = np.array([0]*patient_duration)  
+        interval_info[patient_name] = []
+        
+        
+        # check interval flag for real exisitied file
         for file in patient_file_list[patient_name]:
             file_start, file_end = get_file_start_end_time(file)
             file_start_pos = file_start - patient_start_time
             file_end_pos = file_end - patient_start_time
             enable_period_flag[patient_name][file_start_pos:file_end_pos] = 1
+            interval_info[patient_name].append([file_start_pos, file_end_pos, file])
+            
             
         seizure_time_set = []
-        
-        
+        patient_enable_interval_info[patient_name] = merge_intervals_with_gap(interval_info[patient_name], 300)
+        # calculate total duration for patient
+        patient_total_validation_duration[patient_name] = 0
+        for final_interval in patient_enable_interval_info[patient_name]:
+            patient_total_validation_duration[patient_name] += final_interval[0][1] - final_interval[0][0]
+            
+
         for name_seizure_set in patient_seizure_info[patient_name]:
-            file_path = chb_dir + "/" + name_seizure_set['name']
+            file_path = chb_dir + "/" + patient_name + "/" + name_formatting(name_seizure_set['name'])
             
             for seizure in name_seizure_set['seizure']:
                 seizure_start_time = seizure[0]
                 seizure_end_time = seizure[1]
-                file_start_time = get_file_start_end_time(file_path)
+                file_start_time,_ = get_file_start_end_time(file_path)
                 file_start_pos = file_start_time - patient_start_time
                 ictal_start_pos = file_start_pos + seizure_start_time
                 ictal_end_pos = file_start_pos + seizure_end_time
                 seizure_time_set.append([ictal_start_pos, ictal_end_pos])
-                
+        
+        # edit time_flag_list following seizure info    
         for i in range(len(seizure_time_set)):
             seizure_start_time = seizure_time_set[i][0]
             seizure_end_time = seizure_time_set[i][1]
@@ -225,22 +224,21 @@ if __name__ == '__main__':
             seizure_end_time = seizure_time_set[i][1]
             seizure_time_flag[seizure_start_time:seizure_end_time] = 1
         
-    
-    
-                
-                
-                
-                
+        total_time_flag[patient_name] = seizure_time_flag
         
-        
-            
-        
-        
+    return total_time_flag, patient_enable_interval_info, patient_total_validation_duration, enable_period_flag
+
 
     
-        
     
-        
+            
+
+            
+            
+    
+            
+         
+
     
     
         

@@ -12,6 +12,9 @@ state_list = ['ictal', 'preictal_late', 'preictal_early', 'preictal_ontime', 'po
 def MakePath(filename, data_path):
     return data_path+'/'+(filename.split('_'))[0]+'/'+filename+'.edf'
 
+
+
+
 def LoadDataset(filename):
     df = pd.read_csv(filename)
     columns = ['name','start','end']
@@ -271,6 +274,39 @@ def Interval2Segments(interval_list, data_path, window_size, sliding_size):
 
     return segments_list
 
+def select_validate_patient(data_type):
+    if data_type=='snu' or data_type=='snu_one_ch':
+        train_info_file_path = "/host/d/SNU_DATA/patient_info_snu_train.csv"
+        test_info_file_path = "/host/d/SNU_DATA/patient_info_snu_test.csv"
+        edf_file_path = "/host/d/SNU_DATA"
+
+    elif data_type == 'chb' or data_type=='chb_one_ch':
+        train_info_file_path = "/host/d/CHB/patient_info_chb_train.csv"
+        test_info_file_path = "/host/d/CHB/patient_info_chb_test.csv"
+        edf_file_path = "/host/d/CHB"
+    else:
+        return 
+
+
+    _, train_interval_overall = LoadDataset(train_info_file_path)
+
+
+    # %%
+    channel_filtered_intervals = FilteringByChannel(train_interval_overall, edf_file_path, data_type)
+    interval_dict_key_patient_name = Interval2NameKeyDict(channel_filtered_intervals)
+    filtered_interval_dict, ictal_num = FilterValidatePatient(interval_dict_key_patient_name)
+    total_sens_sum = 0
+    total_fpr_sum = 0
+    validate_patient = []
+    for patient_idx, patient_name in enumerate(filtered_interval_dict.keys()) :
+        # if not patient_name == 'CHB015':
+        #     continue
+        train_val_sets = MakeValidationIntervalSet(filtered_interval_dict[patient_name],least_preictal=1800, least_interictal=3600)
+        if len(train_val_sets) >= 2:
+            validate_patient.append(patient_name)
+            
+    return validate_patient
+
 
 
 
@@ -336,12 +372,13 @@ def Segments2Data(segments, type='snu', manual_channels=None):
             
             for channel in channels:
                 ch_idx = labels.index(channel)
-                signal = f.readSignal(ch_idx,int(freq[ch_idx]*read_start),int(freq[ch_idx]*float(segment[2])))
+                
+                signal = f.readSignal(ch_idx, int(freq[ch_idx]*read_start), int(freq[ch_idx]*float(segment[2])))
+                if not len(signal) == int(freq[ch_idx]*float(segment[2])):
+                    return None
                 #128가 아닐 경우 256Hz로 interpolation을 이용한 upsampling
                 if not freq[ch_idx] == target_sampling_rate:
                     signal = resample(signal, int(float(segment[2]) * target_sampling_rate ))
-                    
-                
                 # for j in range(len(interval_sets)):
                 #     seg[j].append( list(signal[int(interval_sets[j][0] * target_sampling_rate) : int(interval_sets[j][1] * target_sampling_rate) ]) )
                 for j in range(len(interval_sets)):

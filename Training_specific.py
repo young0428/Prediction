@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # # lstm_model_name = "one_channel_patient_specific_chb_DCAE_LSTM"
     data_type = 'snu_one_ch'
 
-    dilation_model_name = 'snu_one_ch_dilation_lstm_300sec_random_filtering_ip21'
+    dilation_model_name = 'snu_one_ch_dilation_lstm_30sec_random_filtering_ip21'
     #dilation_model_name = 'one_ch_mvit_6_4sec'
     #channels = ['FP1-F7','T7-P7','FP2-F4','T8-P8','P7-O1','P8-O2']
     channels = ["Fp1-AVG", "Fp2-AVG", "T3-AVG", "T4-AVG", "O1-AVG", "O2-AVG"]
